@@ -1,0 +1,70 @@
+- name: Configure Dataproc Master Node
+  hosts: all
+  become: yes
+  user: ubuntu
+  vars:
+    access_key: "{{ access_key_var }}"
+    secret_key: "{{ secret_key_var }}"
+    s3_bucket: "{{ s3_bucket_var }}"
+    hdfs_data_dir: "/user/ubuntu/data"
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      ignore_errors: yes
+
+    - name: Install packages
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - s3cmd
+        - jq
+
+    - name: Configure s3cmd
+      template:
+        src: s3cfg.j2
+        dest: /home/ubuntu/.s3cfg
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+      become: no
+
+    - name: Sync content from source bucket to destination bucket (async)
+      command: "s3cmd sync --progress --config=/home/ubuntu/.s3cfg --acl-public s3://otus-mlops-source-data/ s3://{{ s3_bucket }}/"
+      async: 6600 # Max runtime
+      poll: 30    # Check status every 30 seconds
+      become: no
+      args:
+        chdir: /home/ubuntu
+
+    - name: Create directory in HDFS
+      command: "hdfs dfs -mkdir -p {{ hdfs_data_dir }}"
+      register: mkdir_result
+      changed_when: "mkdir_result.rc == 0"
+      failed_when: "mkdir_result.rc != 0 and 'File exists' not in mkdir_result.stderr"
+      become: no
+
+    - name: Copy content from S3 to HDFS (async, with update)
+      command: "hadoop distcp -update s3a://{{ s3_bucket }}/ {{ hdfs_data_dir }}/"
+      async: 9200 # Max runtime
+      poll: 30    # Check status every 30 seconds
+      become: no
+
+    - name: Verify that data exists in HDFS
+      command: "hdfs dfs -count {{ hdfs_data_dir }}"
+      register: hdfs_count
+      changed_when: false
+      become: no
+      failed_when: "hdfs_count.stdout | regex_search('^\\s*\\d+\\s+\\d+\\s+\\d+') and (hdfs_count.stdout.split() | list)[1] == '0'"
+
+    - name: List files in HDFS directory
+      command: "hdfs dfs -ls {{ hdfs_data_dir }}"
+      register: ls_result
+      changed_when: false
+      become: no
+
+    - name: Show HDFS directory listing
+      debug:
+        msg: "{{ ls_result.stdout_lines }}"
