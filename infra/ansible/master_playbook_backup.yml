@@ -9,12 +9,11 @@
     access_key: "{{ access_key_var }}"
     secret_key: "{{ secret_key_var }}"
     s3_bucket: "{{ s3_bucket_var }}"
-    source_s3_bucket: "otus-mlops-source-data"   # NEW: remote source bucket
     hdfs_data_dir: "/user/ubuntu/data"
     spark_jars_dir: "/usr/lib/spark/jars"
     hadoop_aws_jar_url: "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar"
     aws_sdk_jar_url: "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.11.1026/aws-java-sdk-bundle-1.11.1026.jar"
-    copy_single_file: false  # Если true, копируем только 2019-08-22.txt; если false, копируем все файлы
+    copy_single_file: true  # Если true, копируем только 2019-08-22.txt; если false, копируем все файлы
     single_file_name: "2019-08-22.txt"
   tasks:
     - name: Update apt cache
@@ -31,6 +30,57 @@
         - s3cmd
         - jq
 
+    - name: Configure s3cmd
+      template:
+        src: s3cfg.j2
+        dest: /home/ubuntu/.s3cfg
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+      become: no
+
+    - name: Sync SINGLE file from source bucket to destination bucket (when copy_single_file is true)
+      command: >
+        s3cmd sync --progress --config=/home/ubuntu/.s3cfg --acl-public --no-check-md5 --no-mime-magic
+        s3://otus-mlops-source-data/{{ single_file_name }}
+        s3://{{ s3_bucket }}/
+      async: 3600
+      poll: 30
+      become: no
+      args:
+        chdir: /home/ubuntu
+      ignore_errors: yes
+      when: copy_single_file
+      retries: 3
+      delay: 60
+
+    - name: Sync ALL files from source bucket to destination bucket (when copy_single_file is false)
+      shell: |
+        echo "=== Начинаем синхронизацию всех файлов ==="
+        s3cmd sync --progress --config=/home/ubuntu/.s3cfg --acl-public --no-check-md5 --no-mime-magic \
+          s3://otus-mlops-source-data/ \
+          s3://{{ s3_bucket }}/ 2>&1 | \
+        while IFS= read -r line; do
+          echo "$(date +%H:%M:%S) SYNC: $line"
+        done
+        echo "=== Синхронизация завершена ==="
+      async: 7200
+      poll: 60
+      become: no
+      args:
+        chdir: /home/ubuntu
+        executable: /bin/bash
+      ignore_errors: yes
+      when: not copy_single_file
+      retries: 3
+      delay: 60
+      register: sync_all_result
+
+    - name: Show sync result for ALL files
+      debug:
+        msg: "Синхронизация всех файлов: {{ 'завершена' if sync_all_result is succeeded else 'с ошибками' }}"
+      when: not copy_single_file
+
     - name: Create directory in HDFS
       command: "hdfs dfs -mkdir -p {{ hdfs_data_dir }}"
       register: mkdir_result
@@ -38,10 +88,10 @@
       failed_when: "mkdir_result.rc != 0 and 'File exists' not in mkdir_result.stderr"
       become: no
 
-    - name: Copy SINGLE file from remote S3 to HDFS (when copy_single_file is true)
+    - name: Copy SINGLE file from S3 to HDFS (when copy_single_file is true)
       command: >
-        hadoop distcp -update -m 16
-        s3a://{{ source_s3_bucket }}/{{ single_file_name }}
+        hadoop distcp -update 
+        s3a://{{ s3_bucket }}/{{ single_file_name }}
         {{ hdfs_data_dir }}/
       async: 9200
       poll: 30
@@ -49,16 +99,16 @@
       ignore_errors: yes
       when: copy_single_file
 
-    - name: Copy ALL files from remote S3 to HDFS (when copy_single_file is false)
+    - name: Copy ALL files from S3 to HDFS (when copy_single_file is false)
       shell: |
-        echo "=== Начинаем копирование из удалённого S3 в HDFS ==="
+        echo "=== Начинаем копирование в HDFS ==="
         hadoop distcp -update -m 16 \
-          s3a://{{ source_s3_bucket }}/ \
+          s3a://{{ s3_bucket }}/ \
           {{ hdfs_data_dir }}/ 2>&1 | \
         while IFS= read -r line; do
           echo "$(date +%H:%M:%S) HDFS: $line"
         done
-        echo "=== Копирование из S3 в HDFS завершено ==="
+        echo "=== Копирование в HDFS завершено ==="
       async: 14400
       poll: 60
       become: no
@@ -70,7 +120,7 @@
 
     - name: Show distcp result for ALL files
       debug:
-        msg: "Копирование из удалённого S3 в HDFS: {{ 'завершено' if distcp_all_result is succeeded else 'с ошибками' }}"
+        msg: "Копирование в HDFS: {{ 'завершено' if distcp_all_result is succeeded else 'с ошибками' }}"
       when: not copy_single_file
 
     - name: Verify that data exists in HDFS
