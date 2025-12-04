@@ -1,11 +1,19 @@
 # Storage ресурсы
 resource "yandex_storage_bucket" "data_bucket" {
-  depends_on  = [yandex_resourcemanager_folder_iam_member.sa_roles]
+  depends_on    = [yandex_resourcemanager_folder_iam_member.sa_roles]
   bucket        = "${var.yc_bucket_name}-${var.yc_folder_id}"
   access_key    = yandex_iam_service_account_static_access_key.sa_static_key.access_key
   secret_key    = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
   force_destroy = true
-  acl           = "public-read" # Делаем бакет публичным для чтения
+}
+
+resource "yandex_storage_bucket_grant" "public_read_grant" {
+  bucket = yandex_storage_bucket.data_bucket.id
+  grant {
+    permissions = ["READ"]
+    type        = "Group"
+    uri         = "http://acs.amazonaws.com/groups/global/AllUsers"
+  }
 }
 
 # IAM ресурсы
@@ -178,55 +186,24 @@ resource "null_resource" "cluster_provisioner" {
   depends_on = [yandex_dataproc_cluster.dataproc_cluster]
 
   provisioner "local-exec" {
-    command = <<-EOT
-      set -e
-      
-      LOG_FILE="terraform_provision.log"
-      echo "Starting provisioner script..." > $LOG_FILE
-
-      # --- Ожидание появления ВМ и получение IP ---
-      echo "Waiting for master node VM to appear..." >> $LOG_FILE
-      MASTER_IP=""
-      i=0
-      while [ $i -lt 30 ]; do
-        # Логируем полный вывод yc для отладки
-        echo "--- YC compute instance list output (Attempt $((i+1))) ---" >> $LOG_FILE
-        yc --token ${var.yc_token} --folder-id ${var.yc_folder_id} compute instance list --format json >> $LOG_FILE 2>&1 || true
-        echo "--- End of YC output ---" >> $LOG_FILE
-
-        # Ищем ВМ по меткам кластера и роли мастер-ноды
-        MASTER_IP=$(yc --token ${var.yc_token} --folder-id ${var.yc_folder_id} compute instance list --format json | jq -r '.[] | select(.labels.cluster_id == "${yandex_dataproc_cluster.dataproc_cluster.id}" and .labels.subcluster_role == "masternode") | .network_interfaces[0].primary_v4_address.one_to_one_nat.address // ""' 2>>$LOG_FILE)
-        if [ -n "$MASTER_IP" ]; then
-          echo "VM found, IP: $MASTER_IP" >> $LOG_FILE
-          break
-        fi
-        i=$((i+1))
-        echo "Attempt $i: Master node VM not found, sleeping 10s..." >> $LOG_FILE
-        sleep 10
-      done
-
-      if [ -z "$MASTER_IP" ]; then
-        echo "Error: Master node VM not found or has no public IP." >> $LOG_FILE
-        exit 1
-      fi
-      echo "Master node IP: $MASTER_IP" >> $LOG_FILE
-
-      # --- Запуск Ansible ---
-      echo "Running Ansible playbook..." >> $LOG_FILE
-      PYTHONUNBUFFERED=1 ansible-playbook -v -i "$MASTER_IP," \
-        --private-key ${var.private_key_path} \
-        -u ubuntu \
-        --ssh-common-args '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
-        --extra-vars 'access_key_var=${yandex_iam_service_account_static_access_key.sa_static_key.access_key} secret_key_var=${yandex_iam_service_account_static_access_key.sa_static_key.secret_key} s3_bucket_var=${yandex_storage_bucket.data_bucket.bucket}' \
-        ${path.root}/ansible/master_playbook.yml >>$LOG_FILE 2>&1
-      
-      echo "Provisioning finished." >> $LOG_FILE
-    EOT
+    command     = "bash ./scripts/provision_cluster.sh"
+    working_dir = path.module
     
     environment = {
-      YC_TOKEN     = var.yc_token
-      YC_CLOUD_ID  = var.yc_cloud_id
-      YC_FOLDER_ID = var.yc_folder_id
+      YC_TOKEN         = var.yc_token
+      YC_CLOUD_ID      = var.yc_cloud_id
+      YC_FOLDER_ID     = var.yc_folder_id
+      PRIVATE_KEY_PATH = var.private_key_path
+      ACCESS_KEY       = yandex_iam_service_account_static_access_key.sa_static_key.access_key
+      SECRET_KEY       = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
+      S3_BUCKET        = yandex_storage_bucket.data_bucket.bucket
+      ANSIBLE_ROOT     = path.root
     }
   }
+
+  triggers = {
+    cluster_id = yandex_dataproc_cluster.dataproc_cluster.id
+  }
 }
+
+
