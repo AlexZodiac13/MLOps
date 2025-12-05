@@ -6,5 +6,5 @@ infra/terraform.tfstate
 infra/terraform.tfstate.backup
 terraform.tfstate
 /log/*
-
+/s3/clean
 .terraform.tfstate.lock.info

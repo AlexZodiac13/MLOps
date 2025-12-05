@@ -14,7 +14,7 @@
     spark_jars_dir: "/usr/lib/spark/jars"
     hadoop_aws_jar_url: "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar"
     aws_sdk_jar_url: "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.11.1026/aws-java-sdk-bundle-1.11.1026.jar"
-    copy_single_file: false  # Если true, копируем только 2019-08-22.txt; если false, копируем все файлы
+    copy_single_file: true  # Если true, копируем только 2019-08-22.txt; если false, копируем все файлы
     single_file_name: "2019-08-22.txt"
   tasks:
     - name: Update apt cache
