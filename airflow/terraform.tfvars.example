@@ -1,0 +1,10 @@
+yc_token     = "YOUR_YC_TOKEN"
+cloud_id     = "YOUR_CLOUD_ID"
+folder_id    = "YOUR_FOLDER_ID"
+zone         = "ru-central1-a"
+network_id   = "YOUR_NETWORK_ID"
+subnet_ids   = ["YOUR_SUBNET_ID"]
+bucket_name  = "your-airflow-bucket-name"
+cluster_name = "your-airflow-cluster"
+airflow_version = "2.6"
+web_ui_public_ip = true

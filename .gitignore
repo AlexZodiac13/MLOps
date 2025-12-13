@@ -1,10 +1,10 @@
 # Terraform local files
-/infra/.terraform/
-/infra/terraform.tfvars
+/*/.terraform/
+/*/terraform.tfvars
 # Terraform state files (should never be committed)
-infra/terraform.tfstate
-infra/terraform.tfstate.backup
+/*/terraform.tfstate
+/*/terraform.tfstate.backup
 terraform.tfstate
-/log/*
+/*/log/*
 /s3/clean
 .terraform.tfstate.lock.info

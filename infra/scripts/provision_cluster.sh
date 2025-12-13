@@ -1,11 +1,11 @@
 #!/bin/bash
 set -e
 
-LOG_FILE="../log/terraform_provision.log"
-SUMMARY_FILE="../log/terraform_summary.txt"
+LOG_FILE="log/terraform_provision.log"
+SUMMARY_FILE="log/terraform_summary.txt"
 
 # Очищаем логи перед началом
-mkdir -p ../log
+mkdir -p log
 echo "" > $LOG_FILE
 echo "" > $SUMMARY_FILE
 
