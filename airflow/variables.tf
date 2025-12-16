@@ -24,10 +24,48 @@ variable "network_id" {
   description = "VPC network id to create Airflow in"
 }
 
+variable "create_network" {
+  type        = bool
+  description = "Create a new VPC network and subnet for Airflow. If false, use existing `network_id` and `subnet_ids`."
+  default     = true
+}
+
 variable "subnet_ids" {
   type        = list(string)
-  description = "List of subnet ids"
+  description = "List of subnet resource IDs to use when `create_network=false`. Leave empty to use created subnet when `create_network=true`."
+  default     = []
+
+  validation {
+    condition     = alltrue([for s in var.subnet_ids : !can(regex("^\\d+\\.\\d+\\.\\d+\\.\\d+\\/\\d+$", s))])
+    error_message = "Each entry in 'subnet_ids' must be a subnet resource ID (e.g. 'b1g...'), not a CIDR like '10.0.0.0/24'."
+  }
 }
+
+
+variable "upload_with_terraform" {
+  type        = bool
+  description = "If true, upload repository files to Object Storage using Terraform resources (`yandex_storage_object`). If false, use local sync script or DAG-based upload."
+  default     = true
+}
+
+variable "network_name" {
+  type        = string
+  description = "Name for the VPC network to create when `create_network=true`."
+  default     = "airflow-network"
+}
+
+variable "subnet_name" {
+  type        = string
+  description = "Name for the subnet to create when `create_network=true`."
+  default     = "airflow-subnet"
+}
+
+variable "subnet_cidr" {
+  type        = string
+  description = "CIDR block for the subnet to create when `create_network=true`."
+  default     = "10.0.0.0/24"
+}
+
 
 variable "bucket_name" {
   type        = string
@@ -42,7 +80,18 @@ variable "cluster_name" {
 
 variable "airflow_version" {
   type    = string
-  default = "2.6" # поменяйте при необходимости
+  default = "2.6" 
+}
+
+variable "python_version" {
+  type    = string
+  default = "3.11.7"
+  description = "Python runtime version for Airflow (e.g. 3.11.7, 3.10.13, 3.9.18). Use a full version (including patch) supported by the chosen Airflow version. If API rejects, try another patch version from the same minor series."
+
+  validation {
+    condition     = can(regex("^3\\.(8|9|10|11)(\\.[0-9]+)?$", var.python_version))
+    error_message = "python_version must be in the 3.8,3.9,3.10,3.11 family (optionally with patch, e.g. 3.8.17). Use a value supported by the chosen Airflow version."
+  }
 }
 
 variable "web_ui_public_ip" {
@@ -53,4 +102,41 @@ variable "web_ui_public_ip" {
 variable "labels" {
   type    = map(string)
   default = {}
+}
+
+variable "create_airflow_service_account" {
+  type    = bool
+  default = true
+  description = "Create a dedicated service account for Airflow and bind basic roles (storage)."
+}
+
+variable "airflow_service_account_name" {
+  type    = string
+  default = "airflow-sa"
+}
+
+variable "scheduler_resource_preset" {
+  type    = string
+  default = "c2-m4"
+}
+
+variable "worker_resource_preset" {
+  type    = string
+  default = "c2-m4"
+}
+
+variable "worker_disk_size_gb" {
+  type    = number
+  default = 20
+}
+
+variable "dags_bucket_path" {
+  type    = string
+  default = "dags"
+}
+
+variable "admin_password" {
+  type        = string
+  description = "Admin password for Airflow web UI (set in terraform.tfvars)"
+  sensitive   = true
 }

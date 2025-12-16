@@ -2,9 +2,30 @@ yc_token     = "YOUR_YC_TOKEN"
 cloud_id     = "YOUR_CLOUD_ID"
 folder_id    = "YOUR_FOLDER_ID"
 zone         = "ru-central1-a"
+create_network = true
+# When create_network=true the module will create a VPC + subnet and use them.
+# If you prefer to use an existing network/subnet set create_network = false and provide:
 network_id   = "YOUR_NETWORK_ID"
-subnet_ids   = ["YOUR_SUBNET_ID"]
+subnet_ids   = ["YOUR_SUBNET_ID"]  # use subnet resource id(s), not CIDR (e.g. "b1g...")
 bucket_name  = "your-airflow-bucket-name"
 cluster_name = "your-airflow-cluster"
-airflow_version = "2.6"
+airflow_version = "2.10"
+python_version  = "3.10"
 web_ui_public_ip = true
+admin_password = "<your-admin-password>"
+
+
+
+
+standard
+Имя класса хостов	Количество vCPU	RAM, ГБ
+c1-m4	1	4
+c2-m8	2	8
+c4-m16	4	16
+c8-m32	8	32
+cpu-optimized
+Имя класса хостов	Количество vCPU	RAM, ГБ
+c1-m2	1	2
+c2-m4	2	4
+c4-m8	4	8
+c8-m16	8	16

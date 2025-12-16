@@ -3,10 +3,27 @@ output "bucket_name" {
 }
 
 output "airflow_cluster_id" {
-  value = yandex_mdb_airflow_cluster.airflow.id
+  value = yandex_airflow_cluster.airflow.id
 }
 
-output "airflow_web_ui_url" {
-  # TODO: если у ресурса есть поле web_ui_url — замените на правильный атрибут
-  value = yandex_mdb_airflow_cluster.airflow.web_ui_url
+output "airflow_service_account_id" {
+  value = try(yandex_iam_service_account.airflow_sa[0].id, "")
+}
+
+output "airflow_service_account_access_key" {
+  value     = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].access_key, "")
+  sensitive = true
+}
+
+output "airflow_service_account_secret_key" {
+  value     = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].secret_key, "")
+  sensitive = true
+}
+
+output "airflow_network_id" {
+  value = try(yandex_vpc_network.airflow_network[0].id, "")
+}
+
+output "airflow_subnet_id" {
+  value = try(yandex_vpc_subnet.airflow_subnet[0].id, "")
 }
