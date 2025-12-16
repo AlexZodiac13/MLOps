@@ -1,10 +1,4 @@
-# Terraform local files
-/*/.terraform/
-/*/terraform.tfvars
-# Terraform state files (should never be committed)
-/*/terraform.tfstate
-/*/terraform.tfstate.backup
-terraform.tfstate
-/*/log/*
-/s3/clean
-.terraform.tfstate.lock.info
+.venv
+.env
+db.txt
+*.db

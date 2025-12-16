@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "feature-store"
+version = "0.1.0"
+description = ""
+authors = ["Nikolay Stepanov <nikolai.d.stepanov@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+feast = "^0.40.1"
+pandas = "^2.2.3"
+jupyter = "^1.1.1"
+lab = "^8.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
