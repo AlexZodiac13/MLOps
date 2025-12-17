@@ -24,3 +24,14 @@ output "jupyter_access" {
   description = "Jupyter access information"
   value       = "После завершения terraform apply, токен будет в файле: log/terraform_summary.txt"
 }
+
+output "bucket_admin_access_key" {
+  value       = yandex_iam_service_account_static_access_key.bucket_admin_key.access_key
+  description = "Access key for bucket admin"
+}
+
+output "bucket_admin_secret_key" {
+  value       = yandex_iam_service_account_static_access_key.bucket_admin_key.secret_key
+  description = "Secret key for bucket admin"
+  sensitive   = true
+}

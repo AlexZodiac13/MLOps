@@ -46,6 +46,22 @@ resource "yandex_iam_service_account_static_access_key" "sa_static_key" {
   description        = "Static access key for object storage"
 }
 
+resource "yandex_iam_service_account" "bucket_admin" {
+  name        = "bucket-admin"
+  description = "Service account for Bucket Admin"
+}
+
+resource "yandex_resourcemanager_folder_iam_member" "bucket_admin_role" {
+  folder_id = var.yc_folder_id
+  role      = "storage.admin"
+  member    = "serviceAccount:${yandex_iam_service_account.bucket_admin.id}"
+}
+
+resource "yandex_iam_service_account_static_access_key" "bucket_admin_key" {
+  service_account_id = yandex_iam_service_account.bucket_admin.id
+  description        = "Static access key for bucket admin"
+}
+
 # Network ресурсы
 resource "yandex_vpc_network" "network" {
   name = var.yc_network_name
@@ -151,7 +167,7 @@ resource "yandex_dataproc_cluster" "dataproc_cluster" {
       properties = {
         "yarn:yarn.resourcemanager.am.max-attempts" = 5
       }
-      ssh_public_keys = [file(var.public_key_path)]
+      ssh_public_keys = [var.public_key]
     }
 
     subcluster_spec {
@@ -193,7 +209,7 @@ resource "null_resource" "cluster_provisioner" {
       YC_TOKEN         = var.yc_token
       YC_CLOUD_ID      = var.yc_cloud_id
       YC_FOLDER_ID     = var.yc_folder_id
-      PRIVATE_KEY_PATH = var.private_key_path
+      PRIVATE_KEY_CONTENT = var.private_key
       ACCESS_KEY       = yandex_iam_service_account_static_access_key.sa_static_key.access_key
       SECRET_KEY       = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
       S3_BUCKET        = yandex_storage_bucket.data_bucket.bucket

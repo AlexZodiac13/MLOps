@@ -5,7 +5,7 @@ terraform {
     yandex = {
       source  = "yandex-cloud/yandex"
       # соответствие доступным локально релизам (см. .terraform.lock.hcl)
-      version = ">= 0.170.0, <= 0.173.0"
+      version = ">= 0.170.0, <= 0.174.0"
     }
     null = {
       source  = "hashicorp/null"

@@ -8,3 +8,4 @@ terraform.tfstate
 /*/log/*
 /s3/clean
 .terraform.tfstate.lock.info
+infra/files/yc

@@ -69,14 +69,15 @@ variable "yc_dataproc_version" {
   description = "Dataproc version"
 }
 
-variable "public_key_path" {
+variable "public_key" {
   type        = string
-  description = "Path to the public SSH key"
+  description = "Public SSH key content"
 }
 
-variable "private_key_path" {
+variable "private_key" {
   type        = string
-  description = "Path to the private SSH key"
+  description = "Private SSH key content"
+  sensitive   = true
 }
 
 variable "dataproc_master_resources" {

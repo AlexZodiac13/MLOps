@@ -41,6 +41,24 @@ resource "yandex_vpc_subnet" "airflow_subnet" {
   folder_id      = var.folder_id
   network_id     = yandex_vpc_network.airflow_network[0].id
   v4_cidr_blocks = [var.subnet_cidr]
+  route_table_id = yandex_vpc_route_table.airflow_rt[0].id
+}
+
+resource "yandex_vpc_gateway" "airflow_nat" {
+  count = var.create_network ? 1 : 0
+  name  = "${var.network_name}-nat"
+  shared_egress_gateway {}
+}
+
+resource "yandex_vpc_route_table" "airflow_rt" {
+  count      = var.create_network ? 1 : 0
+  name       = "${var.network_name}-rt"
+  network_id = yandex_vpc_network.airflow_network[0].id
+
+  static_route {
+    destination_prefix = "0.0.0.0/0"
+    gateway_id         = yandex_vpc_gateway.airflow_nat[0].id
+  }
 }
 
 locals {

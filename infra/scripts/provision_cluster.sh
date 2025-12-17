@@ -18,11 +18,20 @@ echo "Логи очищены и готовы к записи" | tee -a $LOG_FIL
 # Параметры из Terraform
 YC_TOKEN=${YC_TOKEN}
 YC_FOLDER_ID=${YC_FOLDER_ID}
-PRIVATE_KEY_PATH=${PRIVATE_KEY_PATH}
+PRIVATE_KEY_CONTENT="${PRIVATE_KEY_CONTENT}"
 ACCESS_KEY=${ACCESS_KEY}
 SECRET_KEY=${SECRET_KEY}
 S3_BUCKET=${S3_BUCKET}
 ANSIBLE_ROOT=${ANSIBLE_ROOT}
+
+if [ -n "$PRIVATE_KEY_CONTENT" ]; then
+  echo "Creating private key file from content..."
+  echo "$PRIVATE_KEY_CONTENT" > private_key.pem
+  chmod 600 private_key.pem
+  PRIVATE_KEY_PATH="private_key.pem"
+else
+  PRIVATE_KEY_PATH=${PRIVATE_KEY_PATH}
+fi
 
 # Get master node IP
 MASTER_IP=$(yc --token $YC_TOKEN --folder-id $YC_FOLDER_ID compute instance list --format json | \
@@ -59,7 +68,7 @@ ansible-playbook -i "$MASTER_IP," \
   --ssh-common-args '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=30 -o ServerAliveCountMax=120 -o ConnectTimeout=60 -o TCPKeepAlive=yes -o Compression=yes' \
   --extra-vars "access_key_var=$ACCESS_KEY secret_key_var=$SECRET_KEY s3_bucket_var=$S3_BUCKET" \
   -v \
-  $ANSIBLE_ROOT/ansible/master_playbook.yml 2>&1 | \
+  $ANSIBLE_ROOT/master_playbook.yml 2>&1 | \
 while IFS= read -r line; do
   timestamp=$(date +"%H:%M:%S")
   echo "$timestamp: $line" | tee -a $LOG_FILE

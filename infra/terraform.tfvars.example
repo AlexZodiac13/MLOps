@@ -29,7 +29,7 @@ dataproc_data_resources = {
 dataproc_data_hosts_count = 2
 
 
-
+s2.small
 s2.micro	2	2 ГБ	Лёгкие тестовые БД
 s2.medium	2	8 ГБ	Средние нагрузки
 m2.large	4	16 ГБ	Продакшн-сервисы
