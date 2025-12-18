@@ -65,6 +65,7 @@ with DAG(
     description='Imports variables from variables.json uploaded to DAGs folder',
     schedule_interval='@once', # Run once when enabled
     catchup=False,
+    is_paused_upon_creation=False,
     tags=['setup', 'mlops'],
 ) as dag:
 

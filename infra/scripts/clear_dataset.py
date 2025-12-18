@@ -51,7 +51,9 @@ def main():
     S3_ACCESS_KEY = '{S3_ACCESS_KEY}'
     S3_SECRET_KEY = '{S3_SECRET_KEY}'
 
-    # Инициализация Spark с подавлением спилл предупреждений
+    # Инициализация Spark с оптимизированными настройками для s2.small (16GB RAM)
+    # 16GB Node RAM -> ~12GB Available for YARN -> 1 Executor per node
+    # Executor: 8g heap + 2g overhead = 10g total. Leaves ~2-6g for OS/Hadoop.
     spark = SparkSession.builder \
         .appName("clean_transactions") \
         .config('spark.jars', SPARK_JARS) \
@@ -63,23 +65,14 @@ def main():
         .config("spark.sql.adaptive.enabled", "true") \
         .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
         .config("spark.sql.shuffle.partitions", "400") \
-        .config("spark.driver.memory", "8g") \
-        .config("spark.driver.maxResultSize", "1g") \
-        .config("spark.executor.memory", "10g") \
-        .config("spark.executor.memoryOverhead", "3g") \
-        .config("spark.memory.fraction", "0.8") \
-        .config("spark.memory.storageFraction", "0.1") \
+        .config("spark.driver.memory", "4g") \
+        .config("spark.driver.maxResultSize", "2g") \
+        .config("spark.executor.memory", "8g") \
+        .config("spark.executor.memoryOverhead", "2g") \
+        .config("spark.memory.fraction", "0.6") \
         .config("spark.sql.adaptive.advisoryPartitionSizeInBytes", "64MB") \
-        .config("spark.sql.adaptive.skewJoin.enabled", "true") \
-        .config("spark.sql.adaptive.localShuffleReader.enabled", "true") \
-        .config("spark.sql.execution.arrow.pyspark.enabled", "false") \
-        .config("spark.sql.adaptive.maxRecordsPerFile", "500000") \
         .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
-        .config("spark.kryoserializer.buffer.max", "1024m") \
-        .config("spark.sql.sources.bucketing.enabled", "false") \
-        .config("spark.sql.execution.sortBeforeRepartition", "false") \
-        .config("spark.sql.execution.useObjectHashAggregateExec", "false") \
-        .config("spark.sql.execution.fastHashAggregateRowMaxCapacityBit", "16") \
+        .config("spark.kryoserializer.buffer.max", "512m") \
         .getOrCreate()
 
     spark.sparkContext.setLogLevel('ERROR')
@@ -120,7 +113,9 @@ def main():
             cnt_raw = df_raw.count()
             df_clean = clean_df(df_raw)
             cnt_clean = df_clean.count()
-            df_clean.coalesce(10).write.format('parquet').mode('append').option('compression','snappy').save(f'hdfs://{HDFS_NAMENODE}{HDFS_OUTPUT_DIR}')
+            # Используем coalesce(200) вместо 10, чтобы избежать OOM на больших данных (120GB)
+            # 120GB / 200 = ~600MB на файл, что безопасно для 8GB heap
+            df_clean.coalesce(200).write.format('parquet').mode('append').option('compression','snappy').save(f'hdfs://{HDFS_NAMENODE}{HDFS_OUTPUT_DIR}')
             # Только после успешной записи удаляем исходный файл
             subprocess.run(['hdfs','dfs','-rm', src], capture_output=True)
             print(f'{src}: {cnt_raw:,} -> {cnt_clean:,} processed')
