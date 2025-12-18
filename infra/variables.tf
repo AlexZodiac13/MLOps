@@ -29,10 +29,6 @@ variable "yc_service_account_name" {
   description = "Service Account name"
 }
 
-variable "yc_bucket_name" {
-  type        = string
-  description = "S3 Bucket name"
-}
 
 variable "yc_network_name" {
   type        = string

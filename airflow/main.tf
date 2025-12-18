@@ -9,10 +9,8 @@ resource "yandex_storage_bucket" "airflow_bucket" {
   bucket        = var.bucket_name
   force_destroy = true
   # ACL deprecated — manage access via grants/iam
-  # Явно указываем папку и опционально используем статические ключи SA
+  # Явно указываем папку
   folder_id  = var.folder_id
-  access_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].access_key, null)
-  secret_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].secret_key, null)
 }
 
 # Grant для доступа SA к бакету (если SA создаётся)
@@ -122,8 +120,8 @@ resource "yandex_airflow_cluster" "airflow" {
     s3 = {
       bucket     = yandex_storage_bucket.airflow_bucket.bucket
       path       = var.dags_bucket_path
-      access_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].access_key, "")
-      secret_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].secret_key, "")
+      access_key = local.final_access_key
+      secret_key = local.final_secret_key
     }
   }
 
@@ -164,4 +162,48 @@ locals {
     # Required to allow the managed Airflow service to write metrics and integrate with monitoring
     "managed-airflow.integrationProvider"
   ]
+  
+  # Determine which keys to use: provided vars or generated resource
+  final_access_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].access_key, "")
+  final_secret_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].secret_key, "")
 }
+
+resource "local_file" "variables_json" {
+  content = <<EOF
+{
+  "AWS_ACCESS_KEY_ID": ${jsonencode(local.final_access_key)},
+  "AWS_SECRET_ACCESS_KEY": ${jsonencode(local.final_secret_key)},
+  "airflow-bucket-name": ${jsonencode(yandex_storage_bucket.airflow_bucket.bucket)},
+  "yc_token": ${jsonencode(var.yc_token)},
+  "yc_cloud_id": ${jsonencode(coalesce(var.yc_cloud_id, var.cloud_id))},
+  "yc_folder_id": ${jsonencode(coalesce(var.yc_folder_id, var.folder_id))},
+  "yc_zone": ${jsonencode(coalesce(var.yc_zone, var.zone))},
+  "yc_subnet_name": ${jsonencode(coalesce(var.yc_subnet_name, var.subnet_name))},
+  "yc_service_account_name": ${jsonencode(coalesce(var.yc_service_account_name, var.airflow_service_account_name))},
+  "yc_network_name": ${jsonencode(coalesce(var.yc_network_name, var.network_name))},
+  "yc_subnet_range": ${jsonencode(coalesce(var.yc_subnet_range, var.subnet_cidr))},
+  "yc_dataproc_cluster_name": ${jsonencode(var.yc_dataproc_cluster_name)},
+  "yc_dataproc_version": ${jsonencode(var.yc_dataproc_version)},
+  "public_key": ${jsonencode(var.public_key)},
+  "private_key": ${jsonencode(var.private_key)},
+  "dataproc_master_resources": ${jsonencode(var.dataproc_master_resources)},
+  "dataproc_data_resources": ${jsonencode(var.dataproc_data_resources)},
+  "dataproc_data_hosts_count": ${jsonencode(var.dataproc_data_hosts_count)},
+  "yc_security_group_name": ${jsonencode(var.yc_security_group_name)},
+  "yc_nat_gateway_name": ${jsonencode(var.yc_nat_gateway_name)},
+  "yc_route_table_name": ${jsonencode(var.yc_route_table_name)}
+}
+EOF
+  filename = "variables.json"
+}
+
+resource "yandex_storage_object" "airflow_variables_json" {
+  bucket = yandex_storage_bucket.airflow_bucket.bucket
+  key    = "${var.dags_bucket_path}/variables.json"
+  source = local_file.variables_json.filename
+  
+  depends_on = [
+    local_file.variables_json
+  ]
+}
+

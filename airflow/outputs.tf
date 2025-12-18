@@ -27,3 +27,14 @@ output "airflow_network_id" {
 output "airflow_subnet_id" {
   value = try(yandex_vpc_subnet.airflow_subnet[0].id, "")
 }
+
+output "airflow_web_url" {
+  description = "URL for Airflow Web UI"
+  value       = "https://c-${yandex_airflow_cluster.airflow.id}.airflow.yandexcloud.net"
+}
+
+output "airflow_admin_password" {
+  description = "Password for Airflow Admin (user: admin)"
+  value       = var.admin_password
+  sensitive   = true
+}

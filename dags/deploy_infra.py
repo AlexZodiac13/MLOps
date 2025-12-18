@@ -194,7 +194,43 @@ def install_dependencies(install_dir):
             except OSError:
                 pass
         else:
-            print("Warning: Ansible not found. Provisioning might fail if not pre-installed.")
+            print("Ansible not found. Attempting to install ansible-core via pip into a venv...")
+            try:
+                venv_dir = os.path.join(install_dir, 'venv')
+                import venv
+                venv.create(venv_dir, with_pip=True)
+                
+                venv_python = os.path.join(venv_dir, 'bin', 'python3')
+                if not os.path.exists(venv_python):
+                     venv_python = os.path.join(venv_dir, 'bin', 'python')
+
+                subprocess.check_call([
+                    venv_python, '-m', 'pip', 'install', 
+                    'ansible-core', 
+                    '--no-cache-dir'
+                ])
+                
+                ansible_bin_dir = os.path.join(venv_dir, 'bin')
+                if os.path.exists(os.path.join(ansible_bin_dir, 'ansible-playbook')):
+                    print(f"Successfully installed ansible-core to {venv_dir}")
+                    # Add to bin_dir via symlinks
+                    for binary in ['ansible', 'ansible-playbook']:
+                        src = os.path.join(ansible_bin_dir, binary)
+                        dst = os.path.join(bin_dir, binary)
+                        if os.path.exists(src):
+                            if os.path.exists(dst):
+                                os.remove(dst)
+                            os.symlink(src, dst)
+                            os.chmod(src, 0o755)
+                    ansible_found = True
+                else:
+                    print("Installed ansible-core but binaries not found in expected location.")
+                    
+            except Exception as e:
+                print(f"Failed to install ansible-core: {e}")
+
+    if not ansible_found:
+        print("Warning: Ansible binary (ansible-playbook) not found. Provisioning might fail.")
 
     # 2. Install YC CLI
     yc_path = os.path.join(bin_dir, 'yc')
@@ -373,7 +409,34 @@ def deploy_infra(**context):
     print(f"Using S3 bucket: {s3_bucket}")
     
     s3_prefix = context['params']['infra_prefix']
-    tfvars = context['params']['tfvars']
+    
+    # Load variables from Airflow Variables
+    tfvars = {}
+    vars_to_map = [
+        "yc_token", "yc_cloud_id", "yc_folder_id", "yc_zone",
+        "yc_subnet_name", "yc_service_account_name", "yc_network_name",
+        "yc_route_table_name", "yc_nat_gateway_name", "yc_security_group_name",
+        "yc_subnet_range", "yc_dataproc_cluster_name", "yc_dataproc_version",
+        "public_key", "private_key", "dataproc_master_resources",
+        "dataproc_data_resources", "dataproc_data_hosts_count"
+    ]
+    
+    for var_name in vars_to_map:
+        val = Variable.get(var_name, default_var=None)
+        if val is not None:
+            try:
+                # Try to parse JSON for complex objects (dicts/lists)
+                if val.strip().startswith('{') or val.strip().startswith('['):
+                     tfvars[var_name] = json.loads(val)
+                else:
+                     tfvars[var_name] = val
+            except Exception:
+                tfvars[var_name] = val
+
+    # Override with params if provided
+    if 'tfvars' in context['params']:
+        tfvars.update(context['params']['tfvars'])
+
     run_id = context['run_id'].replace(':', '_').replace('.', '_')
     tmpdir = f"/tmp/infra_{run_id}"
     os.makedirs(tmpdir, exist_ok=True)
@@ -385,12 +448,10 @@ def deploy_infra(**context):
     tfvars_path = os.path.join(tmpdir, 'terraform.tfvars')
     if tfvars:
         with open(tfvars_path, 'a', encoding='utf-8') as f:
-            f.write("\n# Variables from Airflow params\n")
+            f.write("\n# Variables from Airflow params and Variables\n")
             for k, v in tfvars.items():
-                if isinstance(v, str):
-                    f.write(f'{k} = "{v}"\n')
-                else:
-                    f.write(f'{k} = {json.dumps(v, ensure_ascii=False)}\n')
+                # Always use json.dumps to handle escaping of strings (newlines, quotes) and complex objects
+                f.write(f'{k} = {json.dumps(v, ensure_ascii=False)}\n')
 
     
     print("Installing Terraform...")

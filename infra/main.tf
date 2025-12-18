@@ -1,20 +1,3 @@
-# Storage ресурсы
-resource "yandex_storage_bucket" "data_bucket" {
-  depends_on    = [yandex_resourcemanager_folder_iam_member.sa_roles]
-  bucket        = "${var.yc_bucket_name}-${var.yc_folder_id}"
-  access_key    = yandex_iam_service_account_static_access_key.sa_static_key.access_key
-  secret_key    = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
-  force_destroy = true
-}
-
-resource "yandex_storage_bucket_grant" "public_read_grant" {
-  bucket = yandex_storage_bucket.data_bucket.id
-  grant {
-    permissions = ["READ"]
-    type        = "Group"
-    uri         = "http://acs.amazonaws.com/groups/global/AllUsers"
-  }
-}
 
 # IAM ресурсы
 resource "yandex_iam_service_account" "sa" {
@@ -41,26 +24,6 @@ resource "yandex_resourcemanager_folder_iam_member" "sa_roles" {
   member    = "serviceAccount:${yandex_iam_service_account.sa.id}"
 }
 
-resource "yandex_iam_service_account_static_access_key" "sa_static_key" {
-  service_account_id = yandex_iam_service_account.sa.id
-  description        = "Static access key for object storage"
-}
-
-resource "yandex_iam_service_account" "bucket_admin" {
-  name        = "bucket-admin"
-  description = "Service account for Bucket Admin"
-}
-
-resource "yandex_resourcemanager_folder_iam_member" "bucket_admin_role" {
-  folder_id = var.yc_folder_id
-  role      = "storage.admin"
-  member    = "serviceAccount:${yandex_iam_service_account.bucket_admin.id}"
-}
-
-resource "yandex_iam_service_account_static_access_key" "bucket_admin_key" {
-  service_account_id = yandex_iam_service_account.bucket_admin.id
-  description        = "Static access key for bucket admin"
-}
 
 # Network ресурсы
 resource "yandex_vpc_network" "network" {
@@ -148,7 +111,6 @@ resource "yandex_vpc_security_group" "security_group" {
 # Dataproc ресурсы
 resource "yandex_dataproc_cluster" "dataproc_cluster" {
   depends_on  = [yandex_resourcemanager_folder_iam_member.sa_roles]
-  bucket      = yandex_storage_bucket.data_bucket.bucket
   description = "Dataproc Cluster created by Terraform for OTUS project"
   name        = var.yc_dataproc_cluster_name
   labels = {
@@ -210,9 +172,6 @@ resource "null_resource" "cluster_provisioner" {
       YC_CLOUD_ID      = var.yc_cloud_id
       YC_FOLDER_ID     = var.yc_folder_id
       PRIVATE_KEY_CONTENT = var.private_key
-      ACCESS_KEY       = yandex_iam_service_account_static_access_key.sa_static_key.access_key
-      SECRET_KEY       = yandex_iam_service_account_static_access_key.sa_static_key.secret_key
-      S3_BUCKET        = yandex_storage_bucket.data_bucket.bucket
       ANSIBLE_ROOT     = path.root
     }
   }

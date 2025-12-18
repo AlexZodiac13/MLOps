@@ -9,3 +9,4 @@ terraform.tfstate
 /s3/clean
 .terraform.tfstate.lock.info
 infra/files/yc
+/*/variables.json
