@@ -1,12 +1,3 @@
-# Выходные данные
-
-output "cluster_name" {
-  description = "Name of the Dataproc cluster"
-  value       = yandex_dataproc_cluster.dataproc_cluster.name
-}
-
-
-output "jupyter_access" {
-  description = "Jupyter access information"
-  value       = "После завершения terraform apply, токен будет в файле: log/terraform_summary.txt"
-}
+# output "external_ip_address_vm_1" {
+#   value = module.compute.external_ip_address
+# }

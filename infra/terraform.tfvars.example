@@ -1,40 +1,19 @@
-yc_token                 = ""
-yc_cloud_id              = ""
-yc_folder_id             = ""
-yc_zone                  = "ru-central1-a"
-yc_subnet_name           = "otus-subnet"
-yc_service_account_name  = "otus-sa"
-yc_bucket_name           = "otus-bucket"
-yc_network_name          = "otus-network"
-yc_route_table_name      = "otus-route-table"
-yc_nat_gateway_name      = "otus-nat-gateway"
-yc_security_group_name   = "otus-security-group"
-yc_subnet_range          = "10.0.0.0/24"
-yc_dataproc_cluster_name = "otus-dataproc-cluster"
-yc_dataproc_version      = "2.0"
-public_key_path          = "/home/zodiac/.ssh/otus.pub"
-private_key_path         = "/home/zodiac/.ssh/otus"
-
-# Задайте ресурсы для Dataproc / Spark: resource_preset_id и disk_size в ГБ
-dataproc_master_resources = {
-  resource_preset_id = "s2.medium"
-  disk_size          = 50
+yc_config = {
+  token     = ""
+  cloud_id  = ""
+  folder_id = ""
+  zone      = "ru-central1-a"
 }
-
-dataproc_data_resources = {
-  resource_preset_id = "s2.medium"
-  disk_size          = 100
-}
-
-dataproc_data_hosts_count = 2
-
-
-s2.small
-s2.micro	2	2 ГБ	Лёгкие тестовые БД
-s2.medium	2	8 ГБ	Средние нагрузки
-m2.large	4	16 ГБ	Продакшн-сервисы
-m2.xlarge	8	32 ГБ	Высокая нагрузка
-hm1.nano	1	1 ГБ	Минимальные Redis/кэши
-hm1.micro	2	4 ГБ	Redis/кэши среднего размера
-b2.medium	2	8 ГБ	Баланс CPU/RAM
-b2.large	4	16 ГБ	Универсальные задачи
+yc_instance_user         = "ubuntu"
+yc_instance_name         = "airflow-cluster"
+yc_network_name          = "airflow-network"
+yc_subnet_name           = "airflow-subnet"
+yc_service_account_name  = "airflow-cluster-sa"
+yc_bucket_name           = "airflow-bucket"
+yc_storage_endpoint_url  = "https://storage.yandexcloud.net"
+admin_password           = "Большая буква маленькие буквы цифры и знак -"
+public_key_path          = ""
+private_key_path         = ""
+yc_mlflow_instance_name  = "mlflow-server"
+yc_postgres_cluster_name = "postgres-cluster"
+postgres_password        = "StrongPassword123!"

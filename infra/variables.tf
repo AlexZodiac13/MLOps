@@ -1,98 +1,77 @@
-variable "yc_token" {
-  type        = string
-  description = "Yandex Cloud OAuth token"
-  sensitive   = true
+variable "yc_instance_user" {
+  type = string
 }
 
-variable "yc_cloud_id" {
-  type        = string
-  description = "Yandex Cloud Cloud ID"
+variable "yc_instance_name" {
+  type = string
 }
 
-variable "yc_folder_id" {
-  type        = string
-  description = "Yandex Cloud Folder ID"
-}
-
-variable "yc_zone" {
-  type        = string
-  description = "Yandex Cloud Zone"
+variable "yc_network_name" {
+  type = string
 }
 
 variable "yc_subnet_name" {
-  type        = string
-  description = "VPC Subnet name"
+  type = string
 }
 
 variable "yc_service_account_name" {
-  type        = string
-  description = "Service Account name"
+  type    = string
 }
 
-
-variable "yc_network_name" {
-  type        = string
-  description = "VPC Network name"
+variable "yc_bucket_name" {
+  type = string
 }
 
-variable "yc_route_table_name" {
-  type        = string
-  description = "VPC Route table name"
+variable "yc_storage_endpoint_url" {
+  type = string
+  default = "https://storage.yandexcloud.net"
 }
 
-variable "yc_nat_gateway_name" {
-  type        = string
-  description = "VPC NAT Gateway name"
+variable "ubuntu_image_id" {
+  type    = string
 }
 
-variable "yc_security_group_name" {
-  type        = string
-  description = "VPC Security Group name"
+variable "public_key_path" {
+  type = string
 }
 
-variable "yc_subnet_range" {
-  type        = string
-  description = "VPC Subnet CIDR range"
+variable "private_key_path" {
+  type = string
 }
 
-variable "yc_dataproc_cluster_name" {
-  type        = string
-  description = "Dataproc cluster name"
+variable "admin_password" {
+  type = string
+  description = "Admin password for the Airflow web interface"
 }
 
-variable "yc_dataproc_version" {
-  type        = string
-  description = "Dataproc version"
-}
-
-variable "public_key" {
-  type        = string
-  description = "Public SSH key content"
-}
-
-variable "private_key" {
-  type        = string
-  description = "Private SSH key content"
-  sensitive   = true
-}
-
-variable "dataproc_master_resources" {
+variable "yc_config" {
   type = object({
-    resource_preset_id = string
-    disk_size          = number
+    zone      = string
+    folder_id = string
+    token     = string
+    cloud_id  = string
   })
-  description = "Resources for the Dataproc master node."
+  description = "Yandex Cloud configuration"
 }
 
-variable "dataproc_data_resources" {
-  type = object({
-    resource_preset_id = string
-    disk_size          = number
-  })
-  description = "Resources for the Dataproc data nodes."
+variable "airflow_db_conn_default" {
+  type = string
 }
 
-variable "dataproc_data_hosts_count" {
-  type        = number
-  description = "Number of hosts in the data subcluster."
+# MLflow variables
+variable "yc_mlflow_instance_name" {
+  type = string
+  description = "Name of the MLflow server instance"
+}
+
+# PostgreSQL variables
+variable "yc_postgres_cluster_name" {
+  type = string
+  description = "Name of the PostgreSQL cluster"
+}
+
+variable "postgres_password" {
+  type = string
+  description = "Password for PostgreSQL database used by MLflow"
+  sensitive = true
 }

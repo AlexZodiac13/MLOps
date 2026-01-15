@@ -1,0 +1,60 @@
+# CI/CD GitHub Actions
+# sync-dags: job будет синхронизировать DAGs из репозитория с бакетом для Airflow
+# upload-src: job будет загружать исходный код в бакет для Airflow
+
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'dags/**'
+      - 'src/**'
+
+env:
+  YC_S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
+  YC_S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY }}
+  YC_S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
+  YC_S3_ENDPOINT: ${{ secrets.S3_ENDPOINT_URL }}
+
+jobs:
+  sync-dags:
+    name: Sync dags to S3
+    runs-on: ubuntu-latest
+    steps:
+      # загрузка репозитория в runner
+      - uses: actions/checkout@v2
+
+      # загрузка файлов в S3
+      - name: Upload to S3
+        uses: jakejarvis/s3-sync-action@master
+        with:
+          args: --delete
+        env:
+          AWS_S3_BUCKET: ${{ env.YC_S3_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ env.YC_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.YC_S3_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ env.YC_S3_ENDPOINT }}
+          SOURCE_DIR: 'dags'
+          DEST_DIR: 'dags'
+
+  upload-src:
+    name: Upload Source code to S3
+    runs-on: ubuntu-latest
+    steps:
+      # загрузка репозитория в runner
+      - uses: actions/checkout@v2
+
+      # загрузка файлов в S3
+      - name: Upload to S3
+        uses: jakejarvis/s3-sync-action@master
+        with:
+          args: --delete
+        env:
+          AWS_S3_BUCKET: ${{ env.YC_S3_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ env.YC_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.YC_S3_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ env.YC_S3_ENDPOINT }}
+          SOURCE_DIR: 'src'
+          DEST_DIR: 'src'

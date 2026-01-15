@@ -9,8 +9,9 @@ terraform {
 }
 
 provider "yandex" {
-  zone      = var.yc_config.zone
-  folder_id = var.yc_config.folder_id
-  token     = var.yc_config.token
-  cloud_id  = var.yc_config.cloud_id
+  zone      = var.provider_config.zone
+  folder_id = var.provider_config.folder_id
+  token     = var.provider_config.token
+  cloud_id  = var.provider_config.cloud_id
 }
+
