@@ -3,19 +3,46 @@ Script: fraud_detection_model.py
 Description: PySpark script for training a fraud detection model and logging to MLflow.
 """
 
-import os
 import sys
 import traceback
-import argparse
-import mlflow
-import mlflow.spark
-from mlflow.tracking import MlflowClient
-from pyspark.sql import SparkSession
-from pyspark.ml import Pipeline
-from pyspark.ml.feature import VectorAssembler, StandardScaler
-from pyspark.ml.classification import RandomForestClassifier
-from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
-from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
+
+# Setup basic logging to stdout immediately
+def debug_print(msg):
+    print(f"DEBUG_TRAIN: {msg}")
+    sys.stdout.flush()
+
+debug_print("Script starting...")
+
+try:
+    import os
+    import argparse
+    
+    debug_print("Importing standard libs done.")
+    
+    # Check enviromnent
+    debug_print(f"Python version: {sys.version}")
+    debug_print(f"Current working directory: {os.getcwd()}")
+    debug_print(f"Directory listing: {os.listdir('.')}")
+
+    debug_print("Importing pyspark...")
+    from pyspark.sql import SparkSession
+    from pyspark.ml import Pipeline
+    from pyspark.ml.feature import VectorAssembler, StandardScaler
+    from pyspark.ml.classification import RandomForestClassifier
+    from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
+    from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
+    debug_print("Importing pyspark done.")
+
+    debug_print("Importing mlflow...")
+    import mlflow
+    import mlflow.spark
+    from mlflow.tracking import MlflowClient
+    debug_print("Importing mlflow done.")
+
+except Exception as e:
+    debug_print(f"CRITICAL ERROR during imports: {e}")
+    traceback.print_exc()
+    sys.exit(1)
 
 # pylint: disable=broad-exception-caught
 

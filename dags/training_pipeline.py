@@ -9,12 +9,14 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.settings import Session
 from airflow.models import Connection, Variable
+from airflow.operators.bash import BashOperator
 from airflow.utils.trigger_rule import TriggerRule
 from airflow.providers.yandex.operators.dataproc import (
     DataprocCreateClusterOperator,
     DataprocCreatePysparkJobOperator,
     DataprocDeleteClusterOperator
 )
+from yandexcloud._wrappers.dataproc import InitializationAction
 
 # Общие переменные для вашего облака
 YC_ZONE = Variable.get("YC_ZONE")
@@ -44,15 +46,17 @@ MLFLOW_TRACKING_URI = Variable.get("MLFLOW_TRACKING_URI")
 MLFLOW_EXPERIMENT_NAME = "fraud_detection"
 
 # Создание подключения для Object Storage
+# Используем тип 'aws' и передаем endpoint_url в extra для корректной работы S3Hook
+import json
+
 YC_S3_CONNECTION = Connection(
     conn_id="yc-s3",
-    conn_type="s3",
-    host=S3_ENDPOINT_URL,
-    extra={
-        "aws_access_key_id": S3_ACCESS_KEY,
-        "aws_secret_access_key": S3_SECRET_KEY,
-        "host": S3_ENDPOINT_URL,
-    },
+    conn_type="aws",
+    login=S3_ACCESS_KEY,
+    password=S3_SECRET_KEY,
+    extra=json.dumps({
+        "endpoint_url": S3_ENDPOINT_URL,
+    }),
 )
 # Создание подключения для Dataproc
 YC_SA_CONNECTION = Connection(
@@ -85,9 +89,15 @@ def setup_airflow_connections(*connections: Connection) -> None:
     try:
         for conn in connections:
             print("Checking connection:", conn.conn_id)
-            if not session.query(Connection).filter(Connection.conn_id == conn.conn_id).first():
-                session.add(conn)
-                print("Added connection:", conn.conn_id)
+            # Проверяем наличие подключения
+            existing_conn = session.query(Connection).filter(Connection.conn_id == conn.conn_id).first()
+            if existing_conn:
+                print(f"Deleting existing connection: {conn.conn_id}")
+                session.delete(existing_conn)
+                session.flush()
+            
+            print(f"Adding connection: {conn.conn_id}")
+            session.add(conn)
         session.commit()
     except Exception as e:
         session.rollback()
@@ -135,11 +145,18 @@ with DAG(
         cluster_name=f"tmp-dp-training-{uuid.uuid4()}",
         cluster_description="YC Temporary cluster for model training",
         subnet_id=YC_SUBNET_ID,
-        s3_bucket=S3_DP_LOGS_BUCKET,
+        s3_bucket=S3_BUCKET_NAME, # Имя бакета без префикса s3a://
         service_account_id=DP_SA_ID,
         ssh_public_keys=YC_SSH_PUBLIC_KEY,
         zone=YC_ZONE,
         cluster_image_version="2.0",
+        initialization_actions=[
+           InitializationAction(
+               uri=f"s3a://{S3_BUCKET_NAME}/scripts/install_dependencies.sh",
+               timeout=600,
+               args=[]
+           )
+        ],
 
         # masternode
         masternode_resource_preset="s3-c2-m8",
@@ -179,11 +196,58 @@ with DAG(
             "--run-name", f"training_{datetime.now().strftime('%Y%m%d_%H%M')}"
         ],
         properties={
-            'spark.submit.deployMode': 'cluster',
-            'spark.yarn.dist.archives': f'{S3_VENV_ARCHIVE}#.venv',
-            'spark.yarn.appMasterEnv.PYSPARK_PYTHON': './.venv/bin/python3',
-            'spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON': './.venv/bin/python3',
+            'spark.submit.deployMode': 'client',
+            'spark.pyspark.python': '/usr/bin/python3',
+            'spark.pyspark.driver.python': '/usr/bin/python3',
         },
+    )
+
+    # Получение списка логов перед удалением кластера (для отладки)
+    # Используем PythonOperator с s3hook, так как s3cmd нет в образе Airflow
+    def list_logs_in_bucket(**kwargs):
+        from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+        hook = S3Hook(aws_conn_id=YC_S3_CONNECTION.conn_id)
+        bucket = S3_BUCKET_NAME
+        
+        print(f"Scanning for Dataproc logs in bucket {bucket}...")
+        # Ищем логи в папке dataproc/
+        prefixes = ["dataproc/", "airflow_logs/"]
+        found_any = False
+        
+        for prefix in prefixes:
+            print(f"Checking prefix: {prefix}")
+            keys = hook.list_keys(bucket_name=bucket, prefix=prefix)
+            
+            if keys:
+                found_any = True
+                print(f"Found {len(keys)} objects in {prefix}")
+                for key in keys:
+                    # Printing all keys for debug purposes
+                    print(f"Key found: {key}")
+                    
+                    # Фильтруем файлы логов
+                    # "driveroutput" - логи драйвера Spark
+                    # "init_action" или ".log" - возможные логи инициализации
+                    if any(x in key for x in ["driveroutput", ".log", "init_action", "stderr", "stdout"]): 
+                        print(f"\n{'='*50}")
+                        print(f"Reading log file: {key}")
+                        print(f"{'='*50}\n")
+                        try:
+                            content = hook.read_key(key, bucket_name=bucket)
+                            print(content[:10000]) # Increased limit
+                        except Exception as e:
+                            print(f"ERROR reading file: {e}")
+            else:
+                 print(f"No keys found in {prefix}")
+                 
+        if not found_any:
+            print("No objects found in either prefix.")
+
+    get_logs = PythonOperator(
+        task_id="get_logs",
+        python_callable=list_logs_in_bucket,
+        trigger_rule=TriggerRule.ALL_DONE,
+        dag=dag,
     )
 
     # Удаление Dataproc кластера
@@ -195,4 +259,4 @@ with DAG(
 
     # Определение последовательности выполнения задач
     # pylint: disable=pointless-statement
-    setup_connections >> create_spark_cluster >> train_model >> delete_spark_cluster
+    setup_connections >> create_spark_cluster >> train_model >> get_logs >> delete_spark_cluster
