@@ -10,8 +10,11 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import precision_recall_fscore_support, f1_score, precision_score, recall_score, roc_auc_score
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_ind, t
 import warnings
+from pyspark.sql import SparkSession
+from pyspark.mllib.evaluation import MulticlassMetrics
+from pyspark.sql.types import StructType, StructField, DoubleType
 
 warnings.simplefilter(action='ignore', category=(FutureWarning, UserWarning))
 
@@ -435,3 +438,57 @@ def setup_mlflow(tracking_uri="http://localhost:5000", experiment_name="url_clas
         mlflow.set_tracking_uri("file:./mlruns")
         mlflow.set_experiment(experiment_name)
         print("Используется локальное хранилище MLflow")
+
+def evaluate_model_spark(model, X_test, y_test, app_name="ModelEvaluation"):
+    """
+    Оценка модели с использованием PySpark
+
+    Parameters
+    ----------
+    model : sklearn estimator
+        Модель для оценки
+    X_test : array-like
+        Тестовые признаки
+    y_test : array-like
+        Тестовые метки
+    app_name : str, default="ModelEvaluation"
+        Имя приложения Spark
+
+    Returns
+    -------
+    metrics : dict
+        Словарь метрик
+    """
+    print(f"Запуск Spark Session: {app_name}...")
+    spark = SparkSession.builder \
+        .appName(app_name) \
+        .master("local[*]") \
+        .getOrCreate()
+        
+    try:
+        # Предсказание (локально, так как модель sklearn)
+        y_pred = model.predict(X_test)
+        
+        # Создание DataFrame для Spark
+        # data = pd.DataFrame({'prediction': y_pred, 'label': y_test})
+        # В PySpark RDD метки должны быть float
+        
+        data_list = list(zip(map(float, y_pred), map(float, y_test)))
+        
+        predictionAndLabels = spark.sparkContext.parallelize(data_list)
+        
+        # Оценка
+        metrics = MulticlassMetrics(predictionAndLabels)
+        
+        results = {
+            "pyspark_accuracy": metrics.accuracy,
+            "pyspark_weighted_precision": metrics.weightedPrecision,
+            "pyspark_weighted_recall": metrics.weightedRecall,
+            "pyspark_f1": metrics.weightedFMeasure(),
+        }
+        
+        print("PySpark метрики рассчитаны успешно.")
+        return results
+        
+    finally:
+        spark.stop()

@@ -10,3 +10,6 @@ requests
 python-dotenv
 boto3
 cryptography
+pyspark
+apache-airflow
+apache-airflow-providers-apache-spark

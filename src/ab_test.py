@@ -5,6 +5,8 @@
 import os
 import argparse
 import numpy as np
+import mlflow
+from datetime import datetime
 from sklearn.model_selection import RandomizedSearchCV
 
 from dotenv import load_dotenv
@@ -13,7 +15,9 @@ from common import (
     load_and_prepare_data,
     create_base_pipeline,
     evaluate_model,
+    evaluate_model_spark,
     bootstrap_metrics,
+
     statistical_comparison,
     save_model_to_mlflow,
     load_model_from_mlflow,
@@ -76,7 +80,7 @@ def optimize_hyperparameters(
         n_iter=n_iter,
         cv=cv,
         scoring="f1",
-        n_jobs=-1,
+        n_jobs=1,
         verbose=1 if verbose else 0,
         refit=True,
         random_state=random_state,
@@ -133,6 +137,13 @@ def ab_test_models(
     # Оценка производственной модели
     print("Оценка производственной модели...")
     prod_metrics, prod_predictions = evaluate_model(production_model, X_test, y_test)
+    
+    try:
+        print("Оценка производственной модели с PySpark...")
+        prod_spark_metrics = evaluate_model_spark(production_model, X_test, y_test, app_name="ProdModelEval")
+        prod_metrics.update(prod_spark_metrics)
+    except Exception as e:
+        print(f"Ошибка PySpark оценки: {e}")
 
     print("Метрики производственной модели:")
     for metric_name, value in prod_metrics.items():
@@ -141,6 +152,13 @@ def ab_test_models(
     # Оценка модели-кандидата
     print("\nОценка модели-кандидата...")
     cand_metrics, cand_predictions = evaluate_model(candidate_model, X_test, y_test)
+
+    try:
+        print("Оценка модели-кандидата с PySpark...")
+        cand_spark_metrics = evaluate_model_spark(candidate_model, X_test, y_test, app_name="CandModelEval")
+        cand_metrics.update(cand_spark_metrics)
+    except Exception as e:
+        print(f"Ошибка PySpark оценки: {e}")
 
     print("Метрики модели-кандидата:")
     for metric_name, value in cand_metrics.items():
@@ -270,6 +288,31 @@ def run_ab_test(
         bootstrap_iterations=bootstrap_iterations,
         alpha=alpha,
     )
+
+    # Логирование результатов A/B теста в MLflow
+    print("Логирование результатов A/B теста в MLflow...")
+    try:
+        with mlflow.start_run(run_name="ab_test_validation"):
+            mlflow.log_params({
+                "ab_iter": n_iter,
+                "ab_sample_frac": sample_frac,
+                "ab_alpha": alpha
+            })
+            
+            # Основные метрики F1
+            if "F1" in ab_results["comparison_results"]:
+                mlflow.log_metrics({
+                    "prod_f1": ab_results["production_metrics"].get("F1", 0),
+                    "cand_f1": ab_results["candidate_metrics"].get("F1", 0),
+                    "pyspark_cand_f1": ab_results["candidate_metrics"].get("pyspark_f1", 0),
+                    "f1_improvement": ab_results["comparison_results"]["F1"]["improvement"],
+                    "f1_p_value": ab_results["comparison_results"]["F1"]["p_value"]
+                })
+            
+            mlflow.set_tag("should_deploy", str(ab_results["should_deploy"]))
+            print("Результаты теста залогированы.")
+    except Exception as e:
+        print(f"Ошибка при логировании в MLflow: {e}")
 
     # Сохранение модели-кандидата в MLflow
     print(f"\nСохранение модели-кандидата в MLflow...")
