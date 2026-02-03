@@ -1,9 +1,21 @@
-[tool.black]
-line-length = 100
-target-version = ['py37', 'py38', 'py39']
-include = '\.pyi?$'
-extend-exclude = '''
-# A regex preceded with ^/ will apply only to files and directories
-# in the root of the project.
-^/foo.py  # exclude a file named foo.py in the root of the project
-'''
+[project]
+name = "otus-validation"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "boto3==1.39.12",
+    "cryptography==45.0.5",
+    "ipykernel>=6.30.0",
+    "matplotlib>=3.10.3",
+    "mlflow==3.1.4",
+    "numpy>=2.3.1",
+    "pandas>=2.3.1",
+    "pymysql==1.1.1",
+    "python-dotenv>=1.1.1",
+    "requests>=2.32.4",
+    "scikit-learn>=1.7.1",
+    "scipy>=1.16.0",
+    "seaborn>=0.13.2",
+]
