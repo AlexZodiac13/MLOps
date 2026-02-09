@@ -1,0 +1,372 @@
+name: mlops-task8
+
+services:
+  # --------------------
+  # Kafka
+  # --------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Internal for docker network + external for host
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      INPUT_TOPIC: ${KAFKA_INPUT_TOPIC:-inputs}
+      OUTPUT_TOPIC: ${KAFKA_OUTPUT_TOPIC:-predictions}
+      BOOTSTRAP: kafka:29092
+    command: >
+      bash -lc "
+      kafka-topics --bootstrap-server $$BOOTSTRAP --create --if-not-exists --topic $$INPUT_TOPIC --partitions 6 --replication-factor 1;
+      kafka-topics --bootstrap-server $$BOOTSTRAP --create --if-not-exists --topic $$OUTPUT_TOPIC --partitions 6 --replication-factor 1;
+      echo 'Kafka topics ready.';
+      "
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8282:8080"
+    environment:
+      DYNAMIC_CONFIG_ENABLED: "true"
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+
+  # --------------------
+  # S3 (MinIO) for MLflow artifacts
+  # --------------------
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123456}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "curl -fsS http://localhost:9000/minio/health/ready >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123456}
+      MLFLOW_BUCKET: ${MLFLOW_BUCKET:-mlflow}
+    entrypoint: ["/bin/sh", "-lc"]
+    command: >
+      "
+      mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+      mc mb -p local/$$MLFLOW_BUCKET || true;
+      mc anonymous set download local/$$MLFLOW_BUCKET || true;
+      echo 'MinIO bucket ready.';
+      "
+
+  # --------------------
+  # MLflow + Postgres
+  # --------------------
+  mlflow-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${MLFLOW_DB_USER:-mlflow}
+      POSTGRES_PASSWORD: ${MLFLOW_DB_PASSWORD:-mlflow}
+      POSTGRES_DB: ${MLFLOW_DB_NAME:-mlflow}
+    ports:
+      - "5433:5432"
+    volumes:
+      - mlflow-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: services/mlflow/Dockerfile
+    image: mlops-task8-mlflow:latest
+    depends_on:
+      mlflow-db:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio123456}
+      AWS_DEFAULT_REGION: us-east-1
+      MLFLOW_BUCKET: ${MLFLOW_BUCKET:-mlflow}
+      MLFLOW_DB_USER: ${MLFLOW_DB_USER:-mlflow}
+      MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD:-mlflow}
+      MLFLOW_DB_NAME: ${MLFLOW_DB_NAME:-mlflow}
+    command:
+      - mlflow
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - postgresql+psycopg2://${MLFLOW_DB_USER:-mlflow}:${MLFLOW_DB_PASSWORD:-mlflow}@mlflow-db:5432/${MLFLOW_DB_NAME:-mlflow}
+      - --artifacts-destination
+      - s3://${MLFLOW_BUCKET:-mlflow}
+      - --serve-artifacts
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "curl -fsS http://localhost:5000/ >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  mlflow-register:
+    image: mlops-task8-spark:latest
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio123456}
+      AWS_DEFAULT_REGION: us-east-1
+    command: >
+      bash -lc "python3 /opt/app/src/register_model_mlflow.py --model-path /opt/app/data/MNISTClassifier.pt --model-name ${MLFLOW_MODEL_NAME:-mnist} --alias ${MLFLOW_MODEL_ALIAS:-champion}"
+    profiles: ["init"]
+
+  # --------------------
+  # Spark cluster
+  # --------------------
+  spark-master:
+    build:
+      context: .
+      dockerfile: services/spark/Dockerfile
+    image: mlops-task8-spark:latest
+    container_name: task8-spark-master
+    environment:
+      # For MLflow+MinIO access (driver)
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio123456}
+      AWS_DEFAULT_REGION: us-east-1
+    command: >
+      bash -lc "/opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark-master --port 7077 --webui-port 8080"
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    volumes:
+      - ./src:/opt/app/src:ro
+      - ./data:/opt/app/data:ro
+
+  spark-worker-1:
+    image: mlops-task8-spark:latest
+    container_name: task8-spark-worker-1
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_MASTER_URL: spark://spark-master:7077
+      # For MLflow+MinIO access (executors if needed)
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio123456}
+      AWS_DEFAULT_REGION: us-east-1
+    command: >
+      bash -lc "/opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker --cores 2 --memory 2g $$SPARK_MASTER_URL"
+    volumes:
+      - ./src:/opt/app/src:ro
+      - ./data:/opt/app/data:ro
+
+  spark-worker-2:
+    image: mlops-task8-spark:latest
+    container_name: task8-spark-worker-2
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_MASTER_URL: spark://spark-master:7077
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio123456}
+      AWS_DEFAULT_REGION: us-east-1
+    command: >
+      bash -lc "/opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker --cores 2 --memory 2g $$SPARK_MASTER_URL"
+    volumes:
+      - ./src:/opt/app/src:ro
+      - ./data:/opt/app/data:ro
+
+  # Spark streaming inference job (separate container running spark-submit)
+  spark-infer:
+    image: mlops-task8-spark:latest
+    container_name: task8-spark-infer
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      spark-master:
+        condition: service_started
+      mlflow:
+        condition: service_started
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      KAFKA_INPUT_TOPIC: ${KAFKA_INPUT_TOPIC:-inputs}
+      KAFKA_OUTPUT_TOPIC: ${KAFKA_OUTPUT_TOPIC:-predictions}
+      SPARK_MASTER_URL: spark://spark-master:7077
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio123456}
+      AWS_DEFAULT_REGION: us-east-1
+      MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME:-mnist}
+      MLFLOW_MODEL_ALIAS: ${MLFLOW_MODEL_ALIAS:-champion}
+    command: >
+      bash -lc "mkdir -p /tmp/.ivy2 && /opt/spark/bin/spark-submit --master $$SPARK_MASTER_URL --deploy-mode client --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.apache.spark:spark-token-provider-kafka-0-10_2.12:3.5.1 /opt/app/src/spark_streaming_infer.py"
+    volumes:
+      - ./src:/opt/app/src:ro
+      - ./data:/opt/app/data:ro
+    restart: unless-stopped
+
+  # --------------------
+  # Airflow (LocalExecutor)
+  # --------------------
+  airflow-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${AIRFLOW_DB_USER:-airflow}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:-airflow}
+      POSTGRES_DB: ${AIRFLOW_DB_NAME:-airflow}
+    ports:
+      - "5432:5432"
+    volumes:
+      - airflow-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: services/airflow/Dockerfile
+    image: mlops-task8-airflow:latest
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD:-airflow}@airflow-db:5432/${AIRFLOW_DB_NAME:-airflow}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-task8_airflow_secret_key}
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_USER:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_PASSWORD:-airflow}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/app/src:ro
+      - ./data:/opt/app/data:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    user: "0:0"
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - >
+          /home/airflow/.local/bin/airflow db migrate &&
+          /home/airflow/.local/bin/airflow users create \
+            --username "$$_AIRFLOW_WWW_USER_USERNAME" \
+            --password "$$_AIRFLOW_WWW_USER_PASSWORD" \
+            --firstname Admin \
+            --lastname User \
+            --role Admin \
+            --email admin@example.com \
+          || true
+
+  airflow-webserver:
+    image: mlops-task8-airflow:latest
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    ports:
+      - "8088:8080"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD:-airflow}@airflow-db:5432/${AIRFLOW_DB_NAME:-airflow}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-task8_airflow_secret_key}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/app/src:ro
+      - ./data:/opt/app/data:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    user: "0:0"
+    command: webserver
+    restart: unless-stopped
+
+  airflow-scheduler:
+    image: mlops-task8-airflow:latest
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD:-airflow}@airflow-db:5432/${AIRFLOW_DB_NAME:-airflow}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-task8_airflow_secret_key}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/app/src:ro
+      - ./data:/opt/app/data:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    user: "0:0"
+    command: scheduler
+    restart: unless-stopped
+
+volumes:
+  minio-data:
+  mlflow-db:
+  airflow-db:

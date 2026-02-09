@@ -1,0 +1,30 @@
+services:
+  otus-kafka-ui:
+    build: 
+      context: ./ui
+      args:
+        STOREPASS: ${KAFKA_UI_STOREPASS}
+    image: otus-kafka-ui
+    container_name: otus-kafka-ui
+    ports:
+      - "8282:8080"
+    environment:
+      DYNAMIC_CONFIG_ENABLED: true
+      KAFKA_CLUSTERS_0_NAME: ${KAFKA_CLUSTERS_NAME}
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: ${KAFKA_CLUSTERS_BOOTSTRAPSERVERS}
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: SASL_SSL
+      KAFKA_CLUSTERS_0_PROPERTIES_SASL_MECHANISM: PLAIN
+      KAFKA_CLUSTERS_0_PROPERTIES_CLIENT_DNS_LOOKUP: use_all_dns_ips
+      KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG: 'org.apache.kafka.common.security.plain.PlainLoginModule required username="${KAFKA_USER_LOGIN}" password="${KAFKA_USER_PASSWORD}";'
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_LOCATION: /truststore/truststore.jks
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_PASSWORD: ${KAFKA_UI_STOREPASS}
+
+    
+
+
+        
+
+
+
+
+
