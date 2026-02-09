@@ -152,3 +152,24 @@
 [2026-02-03T11:04:09.064+0000] {logging_mixin.py:188} INFO - [2026-02-03T11:04:09.064+0000] {dag.py:3036} INFO - Sync 1 DAGs
 [2026-02-03T11:04:09.076+0000] {logging_mixin.py:188} INFO - [2026-02-03T11:04:09.076+0000] {dag.py:3823} INFO - Setting next_dagrun for model_ab_test_validation to 2026-02-03 00:00:00+00:00, run_after=2026-02-04 00:00:00+00:00
 [2026-02-03T11:04:09.087+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/ab_test_dag.py took 0.046 seconds
+[2026-02-03T11:04:39.167+0000] {processor.py:161} INFO - Started process (PID=5637) to work on /opt/airflow/dags/ab_test_dag.py
+[2026-02-03T11:04:39.168+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/ab_test_dag.py for tasks to queue
+[2026-02-03T11:04:39.168+0000] {logging_mixin.py:188} INFO - [2026-02-03T11:04:39.168+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/ab_test_dag.py
+[2026-02-03T11:04:39.173+0000] {processor.py:840} INFO - DAG(s) 'model_ab_test_validation' retrieved from /opt/airflow/dags/ab_test_dag.py
+[2026-02-03T11:04:39.186+0000] {logging_mixin.py:188} INFO - [2026-02-03T11:04:39.186+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-03T11:04:39.197+0000] {logging_mixin.py:188} INFO - [2026-02-03T11:04:39.197+0000] {dag.py:3823} INFO - Setting next_dagrun for model_ab_test_validation to 2026-02-03 00:00:00+00:00, run_after=2026-02-04 00:00:00+00:00
+[2026-02-03T11:04:39.209+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/ab_test_dag.py took 0.043 seconds
+[2026-02-03T11:05:09.285+0000] {processor.py:161} INFO - Started process (PID=5642) to work on /opt/airflow/dags/ab_test_dag.py
+[2026-02-03T11:05:09.286+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/ab_test_dag.py for tasks to queue
+[2026-02-03T11:05:09.287+0000] {logging_mixin.py:188} INFO - [2026-02-03T11:05:09.286+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/ab_test_dag.py
+[2026-02-03T11:05:09.291+0000] {processor.py:840} INFO - DAG(s) 'model_ab_test_validation' retrieved from /opt/airflow/dags/ab_test_dag.py
+[2026-02-03T11:05:09.307+0000] {logging_mixin.py:188} INFO - [2026-02-03T11:05:09.307+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-03T11:05:09.320+0000] {logging_mixin.py:188} INFO - [2026-02-03T11:05:09.320+0000] {dag.py:3823} INFO - Setting next_dagrun for model_ab_test_validation to 2026-02-03 00:00:00+00:00, run_after=2026-02-04 00:00:00+00:00
+[2026-02-03T11:05:09.332+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/ab_test_dag.py took 0.049 seconds
+[2026-02-03T11:05:39.399+0000] {processor.py:161} INFO - Started process (PID=5647) to work on /opt/airflow/dags/ab_test_dag.py
+[2026-02-03T11:05:39.400+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/ab_test_dag.py for tasks to queue
+[2026-02-03T11:05:39.400+0000] {logging_mixin.py:188} INFO - [2026-02-03T11:05:39.400+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/ab_test_dag.py
+[2026-02-03T11:05:39.405+0000] {processor.py:840} INFO - DAG(s) 'model_ab_test_validation' retrieved from /opt/airflow/dags/ab_test_dag.py
+[2026-02-03T11:05:39.418+0000] {logging_mixin.py:188} INFO - [2026-02-03T11:05:39.418+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-03T11:05:39.428+0000] {logging_mixin.py:188} INFO - [2026-02-03T11:05:39.428+0000] {dag.py:3823} INFO - Setting next_dagrun for model_ab_test_validation to 2026-02-03 00:00:00+00:00, run_after=2026-02-04 00:00:00+00:00
+[2026-02-03T11:05:39.439+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/ab_test_dag.py took 0.042 seconds
