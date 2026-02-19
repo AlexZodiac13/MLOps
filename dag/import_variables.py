@@ -55,10 +55,16 @@ def load_variables(**kwargs):
                 
         logging.info("Variables import completed successfully.")
         
-        # Delete the file after successful import to clean up sensitive data
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            logging.info(f"Deleted {file_path} after successful import.")
+        # Try to delete the file after successful import to clean up sensitive data
+        # Note: In Managed Airflow, the /opt/airflow/dags folder is often read-only for security.
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logging.info(f"Deleted {file_path} after successful import.")
+        except PermissionError:
+            logging.warning(f"Unable to delete {file_path}: Permission denied. This is normal for Managed Airflow where DAGs folder is read-only.")
+        except Exception as e:
+            logging.warning(f"Could not delete {file_path}: {e}")
         
     except Exception as e:
         logging.error(f"Failed to import variables: {e}")
