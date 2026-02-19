@@ -262,9 +262,9 @@ locals {
     "managed-airflow.integrationProvider"
   ]
   
-  # Determine which keys to use: provided vars or generated resource
-  final_access_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].access_key, "")
-  final_secret_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].secret_key, "")
+  # Determine which keys to use: provided vars (from GitHub secrets) or generated resource
+  final_access_key = coalesce(var.aws_access_key, try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].access_key, ""), "redundant_key")
+  final_secret_key = coalesce(var.aws_secret_key, try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].secret_key, ""), "redundant_secret")
 }
 
 resource "local_file" "variables_json" {
@@ -274,13 +274,13 @@ resource "local_file" "variables_json" {
   "AWS_SECRET_ACCESS_KEY": ${jsonencode(local.final_secret_key)},
   "airflow-bucket-name": ${jsonencode(yandex_storage_bucket.airflow_bucket.bucket)},
   "yc_token": ${jsonencode(var.yc_token)},
-  "cloud_id": ${jsonencode(coalesce(var.cloud_id, var.cloud_id))},
-  "folder_id": ${jsonencode(coalesce(var.folder_id, var.folder_id))},
-  "zone": ${jsonencode(coalesce(var.zone, var.zone))},
-  "yc_subnet_name": ${jsonencode(coalesce(var.yc_subnet_name, var.subnet_name))},
-  "yc_service_account_name": ${jsonencode(coalesce(var.yc_service_account_name, var.airflow_service_account_name))},
-  "yc_network_name": ${jsonencode(coalesce(var.yc_network_name, var.network_name))},
-  "yc_subnet_range": ${jsonencode(coalesce(var.yc_subnet_range, var.subnet_cidr))},
+  "cloud_id": ${jsonencode(var.cloud_id)},
+  "folder_id": ${jsonencode(var.folder_id)},
+  "zone": ${jsonencode(var.zone)},
+  "yc_subnet_name": ${jsonencode(var.subnet_name)},
+  "yc_service_account_name": ${jsonencode(var.airflow_service_account_name)},
+  "yc_network_name": ${jsonencode(var.network_name)},
+  "yc_subnet_range": ${jsonencode(var.subnet_cidr)},
   "yc_dataproc_cluster_name": ${jsonencode(var.yc_dataproc_cluster_name)},
   "yc_dataproc_version": ${jsonencode(var.yc_dataproc_version)},
   "public_key": ${jsonencode(var.public_key)},
