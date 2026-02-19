@@ -298,11 +298,13 @@ EOF
 
 resource "yandex_storage_object" "airflow_variables_json" {
   bucket = yandex_storage_bucket.airflow_bucket.bucket
-  key    = "${var.dags_bucket_path}/variables.json"
+  # Загружаем в папку dag/, чтобы файл лежал рядом с import_variables.py
+  key    = "dag/variables.json"
   source = local_file.variables_json.filename
   
   depends_on = [
-    local_file.variables_json
+    local_file.variables_json,
+    yandex_storage_bucket.airflow_bucket
   ]
 }
 
