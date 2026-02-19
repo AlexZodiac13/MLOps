@@ -81,7 +81,7 @@ variable "airflow_version" {
 
 variable "python_version" {
   type    = string
-  default = "3.11"
+  default = "3.10"
   description = "Python runtime version for Airflow (e.g. 3.10, 3.11). Must be in form of Major.Minor."
 
   validation {
