@@ -1,0 +1,43 @@
+name: "Destroy Infrastructure"
+
+on:
+  workflow_dispatch:  # Только ручной запуск по кнопке
+
+env:
+  TF_ROOT: infra
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  YC_TOKEN: ${{ secrets.YC_TOKEN }}
+  YC_CLOUD_ID: ${{ secrets.YC_CLOUD_ID }}
+  YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
+  TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
+  TF_VAR_cloud_id: ${{ secrets.YC_CLOUD_ID }}
+  TF_VAR_folder_id: ${{ secrets.YC_FOLDER_ID }}
+  TF_VAR_admin_password: ${{ secrets.TF_VAR_ADMIN_PASSWORD }}
+  TF_VAR_bucket_name: ${{ vars.TF_VAR_BUCKET_NAME }}
+  
+
+jobs:
+  destroy:
+    name: "Terraform Destroy"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          terraform init \
+            -backend-config="access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -backend-config="secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform destroy -auto-approve

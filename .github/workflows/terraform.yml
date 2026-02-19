@@ -1,0 +1,80 @@
+name: "Terraform Infrastructure"
+
+on:
+  workflow_dispatch:  # Запуск по кнопке
+  push:
+    branches:
+      - project-work
+    paths:
+      - 'infra/**'
+
+env:
+  TF_ROOT: infra
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  YC_TOKEN: ${{ secrets.YC_TOKEN }}
+  YC_CLOUD_ID: ${{ secrets.YC_CLOUD_ID }}
+  YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
+  TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
+  TF_VAR_cloud_id: ${{ secrets.YC_CLOUD_ID }}
+  TF_VAR_folder_id: ${{ secrets.YC_FOLDER_ID }}
+  TF_VAR_admin_password: ${{ secrets.TF_VAR_ADMIN_PASSWORD }}
+  TF_VAR_bucket_name: ${{ vars.TF_VAR_BUCKET_NAME }}
+  TF_VAR_git_repo_url: ${{ github.server_url }}/${{ github.repository }}.git
+  
+  # Необязательные переменные (можно задать в GitHub Vars или Secrets)
+  # TF_VAR_network_id: ${{ vars.TF_VAR_NETWORK_ID }}
+
+jobs:
+  terraform:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      # Установка AWS CLI для синхронизации файлов в S3 (если используется null_resource с local-exec)
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y awscli
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          terraform init \
+            -backend-config="access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -backend-config="secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform apply -auto-approve tfplan
+
+  terraform-destroy:
+    name: "Terraform Destroy"
+    needs: terraform
+    # Запускать destroy только если это отдельный workflow_dispatch с input, или другая логика.
+    # Но обычно destroy делают отдельным workflow файлом, чтобы случайно не нажать.
+    # Здесь пример, как добавить destroy в тот же файл, но с условием (не запускается сам по себе).
+    if: false 
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Destroy is disabled in this workflow. Use manual destroy workflow."
