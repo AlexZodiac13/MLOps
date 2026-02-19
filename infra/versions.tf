@@ -1,7 +1,9 @@
 terraform {
   backend "s3" {
     endpoints = {
-      s3 = "https://s3.owgrant.su"
+      s3  = "https://s3.owgrant.su"
+      sts = "https://s3.owgrant.su"
+      iam = "https://s3.owgrant.su"
     }
     bucket     = "otus"
     region     = "us-east-1" # MinIO требует регион, даже фиктивный
