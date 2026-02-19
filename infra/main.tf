@@ -57,6 +57,7 @@ resource "yandex_vpc_route_table" "airflow_rt" {
 locals {
   # Корневая папка исходников: либо временная папка Git, либо родительская папка (локально)
   source_root = var.git_repo_url != "" ? "${path.module}/.tmp_repo" : "${path.module}/.."
+  mlops_root  = "${path.module}/.."
 }
 
 # Клонирование репозитория (если задан git_repo_url)
@@ -273,9 +274,9 @@ resource "local_file" "variables_json" {
   "AWS_SECRET_ACCESS_KEY": ${jsonencode(local.final_secret_key)},
   "airflow-bucket-name": ${jsonencode(yandex_storage_bucket.airflow_bucket.bucket)},
   "yc_token": ${jsonencode(var.yc_token)},
-  "cloud_id": ${jsonencode(coalesce(var.cloud_id, var.cloud_id))},
-  "folder_id": ${jsonencode(coalesce(var.folder_id, var.folder_id))},
-  "zone": ${jsonencode(coalesce(var.zone, var.zone))},
+  "yc_cloud_id": ${jsonencode(coalesce(var.yc_cloud_id, var.cloud_id))},
+  "yc_folder_id": ${jsonencode(coalesce(var.yc_folder_id, var.folder_id))},
+  "yc_zone": ${jsonencode(coalesce(var.yc_zone, var.zone))},
   "yc_subnet_name": ${jsonencode(coalesce(var.yc_subnet_name, var.subnet_name))},
   "yc_service_account_name": ${jsonencode(coalesce(var.yc_service_account_name, var.airflow_service_account_name))},
   "yc_network_name": ${jsonencode(coalesce(var.yc_network_name, var.network_name))},

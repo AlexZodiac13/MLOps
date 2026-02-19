@@ -57,15 +57,16 @@ jobs:
           terraform init \
             -backend-config="access_key=${S3_ACCESS_KEY}" \
             -backend-config="secret_key=${S3_SECRET_KEY}"
-        run: terraform apply -auto-approve tfplan
 
-  terraform-destroy:
-    name: "Terraform Destroy"
-    needs: terraform
-    # Запускать destroy только если это отдельный workflow_dispatch с input, или другая логика.
-    # Но обычно destroy делают отдельным workflow файлом, чтобы случайно не нажать.
-    # Здесь пример, как добавить destroy в тот же файл, но с условием (не запускается сам по себе).
-    if: false 
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Destroy is disabled in this workflow. Use manual destroy workflow."
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/project-work') && github.event_name == 'workflow_dispatch'
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform apply -auto-approve tfplan
