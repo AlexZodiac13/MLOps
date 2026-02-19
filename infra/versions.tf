@@ -4,14 +4,15 @@ terraform {
       s3 = "https://s3.owgrant.su"
     }
     bucket     = "otus"
-    region     = "us-east-1" 
-    key        = "state/airflow.tfstate" 
+    region     = "us-east-1" # MinIO требует регион, даже фиктивный
+    key        = "state/airflow.tfstate" # Путь к файлу состояния
     
+    # Чтобы работало с MinIO (самоподписанные сертификаты или http)
     skip_credentials_validation = true
     skip_metadata_api_check     = true
     skip_region_validation      = true
     skip_requesting_account_id  = true
-    use_path_style              = true 
+    use_path_style              = true # instead of force_path_style
   }
   required_version = ">= 1.0.0"
 
