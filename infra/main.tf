@@ -218,8 +218,8 @@ resource "yandex_airflow_cluster" "airflow" {
     s3 = {
       bucket     = yandex_storage_bucket.airflow_bucket.bucket
       path       = var.dags_bucket_path
-      access_key = local.final_access_key
-      secret_key = local.final_secret_key
+      access_key = local.sa_access_key
+      secret_key = local.sa_secret_key
     }
   }
 
