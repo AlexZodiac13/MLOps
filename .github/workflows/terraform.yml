@@ -42,11 +42,13 @@ jobs:
         with:
           terraform_version: 1.6.0
 
-      # Установка AWS CLI для синхронизации файлов в S3 (если используется null_resource с local-exec)
+      # Установка AWS CLI v2 (официальный метод, так как в репозиториях Ubuntu 24.04 пакет может отсутствовать)
       - name: Install AWS CLI
         run: |
-          sudo apt-get update
-          sudo apt-get install -y awscli
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          sudo ./aws/install --update
+          aws --version
 
       - name: Terraform Init
         working-directory: ${{ env.TF_ROOT }}
