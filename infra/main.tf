@@ -103,18 +103,17 @@ resource "null_resource" "upload_to_s3" {
     # Используем endpoint из terraform provider или переменной
     command = <<EOT
       # Настройка AWS CLI для Yandex Object Storage (локально для команды)
-      export AWS_ACCESS_KEY_ID="${local.final_access_key}"
-      export AWS_SECRET_ACCESS_KEY="${local.final_secret_key}"
-      export AWS_DEFAULT_REGION="us-east-1"
+      export AWS_ACCESS_KEY_ID="${local.sa_access_key}"
+      export AWS_SECRET_ACCESS_KEY="${local.sa_secret_key}"
       
       echo "Syncing files from ${local.source_root} to s3://${yandex_storage_bucket.airflow_bucket.bucket}..."
       
-      # Синхронизация папки, исключая .terraform и .git
-      # Используем s3cmd или aws s3 sync (если есть). Если нет aws cli, пытаемся простым cp рекурсивно, но лучше aws cli.
-      # Предполагаем наличие aws cli (в CI образе надо поставить).
+      # Синхронизация папки, используя AWS CLI.
+      # Используем --region ru-central1 для Yandex Object Storage.
       
       if command -v aws &> /dev/null; then
           aws --endpoint-url=https://storage.yandexcloud.net s3 sync ${local.source_root} s3://${yandex_storage_bucket.airflow_bucket.bucket} \
+            --region ru-central1 \
             --exclude ".git/*" \
             --exclude ".terraform/*" \
             --exclude "*.tfstate*" \
@@ -263,15 +262,16 @@ locals {
   ]
   
   # Determine which keys to use: provided vars (from GitHub secrets) or generated resource
-  final_access_key = coalesce(var.aws_access_key, try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].access_key, ""), "redundant_key")
-  final_secret_key = coalesce(var.aws_secret_key, try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].secret_key, ""), "redundant_secret")
+  # We prefer the generated SA key for Yandex-specific tasks (like sync) to avoid conflicts with backend secrets
+  sa_access_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].access_key, var.aws_access_key)
+  sa_secret_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].secret_key, var.aws_secret_key)
 }
 
 resource "local_file" "variables_json" {
   content = <<EOF
 {
-  "AWS_ACCESS_KEY_ID": ${jsonencode(local.final_access_key)},
-  "AWS_SECRET_ACCESS_KEY": ${jsonencode(local.final_secret_key)},
+  "AWS_ACCESS_KEY_ID": ${jsonencode(coalesce(local.sa_access_key, "no_key"))},
+  "AWS_SECRET_ACCESS_KEY": ${jsonencode(coalesce(local.sa_secret_key, "no_secret"))},
   "airflow-bucket-name": ${jsonencode(yandex_storage_bucket.airflow_bucket.bucket)},
   "yc_token": ${jsonencode(var.yc_token)},
   "cloud_id": ${jsonencode(var.cloud_id)},

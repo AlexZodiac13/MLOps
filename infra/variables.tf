@@ -81,12 +81,12 @@ variable "airflow_version" {
 
 variable "python_version" {
   type    = string
-  default = "3.11.7"
-  description = "Python runtime version for Airflow (e.g. 3.11.7, 3.10.13, 3.9.18). Use a full version (including patch) supported by the chosen Airflow version. If API rejects, try another patch version from the same minor series."
+  default = "3.11"
+  description = "Python runtime version for Airflow (e.g. 3.11, 3.10, 3.9). Must be in form of Major.Minor."
 
   validation {
-    condition     = can(regex("^3\\.(8|9|10|11)(\\.[0-9]+)?$", var.python_version))
-    error_message = "python_version must be in the 3.8,3.9,3.10,3.11 family (optionally with patch, e.g. 3.8.17). Use a value supported by the chosen Airflow version."
+    condition     = can(regex("^3\\.(8|9|10|11)$", var.python_version))
+    error_message = "python_version must be in the 3.8, 3.9, 3.10, or 3.11 family (e.g. 3.11)."
   }
 }
 
