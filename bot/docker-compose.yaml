@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres-reminder
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: remider
+      POSTGRES_PASSWORD: KvaKvaZaba0091123
+      POSTGRES_DB: reminderdb
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+    networks:
+      - reminder
+    # Проверка готовности Postgres — контейнер станет healthy, когда pg_isready вернёт OK
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reminder -d reminderdb || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  second_memory:
+    image: alexzodiac/second_memory:latest
+    container_name: second_memory
+    restart: unless-stopped
+    # Ждём, пока сервис postgres не станет healthy
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./second_memory/config:/app/config
+    networks:
+      - reminder
+
+networks:
+  reminder:
+    driver: bridge
+
+
+# Структура 
+# /home/docker/reminder/
+#  ├── docker-compose.yml
+#  ├── postgres/
+#  │    └── data/        # данные Postgres
+#  └── second_memory/
+#       └── config/      # конфиг приложения

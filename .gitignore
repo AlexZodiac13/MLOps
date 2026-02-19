@@ -1,3 +1,12 @@
+bot/config/config.ini
+ml/user_messages.csv
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/terraform.tfvars
+ml/llama.cpp
+ml/qwen2.5*
+ml/results
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
