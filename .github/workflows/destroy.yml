@@ -28,16 +28,22 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.0
 
       - name: Terraform Init
         working-directory: ${{ env.TF_ROOT }}
         run: |
-          terraform init \
-            -backend-config="access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" \
-            -backend-config="secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
-            -backend-config="skip_credentials_validation=true" \
-            -backend-config="skip_metadata_api_check=true" \
-            -backend-config="skip_region_validation=true"
+          cat <<EOF > backend.conf
+          access_key                  = "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          secret_key                  = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          skip_credentials_validation = true
+          skip_metadata_api_check     = true
+          skip_region_validation      = true
+          skip_requesting_account_id  = true
+          skip_s3_checksum            = true
+          EOF
+          terraform init -backend-config=backend.conf
 
       - name: Terraform Destroy
         working-directory: ${{ env.TF_ROOT }}

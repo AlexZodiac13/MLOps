@@ -38,9 +38,9 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.6.0
+          terraform_version: 1.7.0
 
-      # Установка AWS CLI v2 (официальный метод, так как в репозиториях Ubuntu 24.04 пакет может отсутствовать)
+      # Установка AWS CLI v2
       - name: Install AWS CLI
         run: |
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -51,12 +51,16 @@ jobs:
       - name: Terraform Init
         working-directory: ${{ env.TF_ROOT }}
         run: |
-          terraform init \
-            -backend-config="access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" \
-            -backend-config="secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
-            -backend-config="skip_credentials_validation=true" \
-            -backend-config="skip_metadata_api_check=true" \
-            -backend-config="skip_region_validation=true"
+          cat <<EOF > backend.conf
+          access_key                  = "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          secret_key                  = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          skip_credentials_validation = true
+          skip_metadata_api_check     = true
+          skip_region_validation      = true
+          skip_requesting_account_id  = true
+          skip_s3_checksum            = true
+          EOF
+          terraform init -backend-config=backend.conf
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_ROOT }}
