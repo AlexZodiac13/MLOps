@@ -55,6 +55,11 @@ def load_variables(**kwargs):
                 
         logging.info("Variables import completed successfully.")
         
+        # Delete the file after successful import to clean up sensitive data
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logging.info(f"Deleted {file_path} after successful import.")
+        
     except Exception as e:
         logging.error(f"Failed to import variables: {e}")
         raise
