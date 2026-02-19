@@ -1,4 +1,4 @@
-name: "Terraform Infrastructure"
+name: "Infrastructure apply"
 
 on:
   workflow_dispatch:  # Запуск по кнопке
@@ -39,14 +39,6 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.0
-
-      # Установка AWS CLI v2
-      - name: Install AWS CLI
-        run: |
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip -q awscliv2.zip
-          sudo ./aws/install --update
-          aws --version
 
       - name: Terraform Init
         working-directory: ${{ env.TF_ROOT }}

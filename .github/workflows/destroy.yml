@@ -1,4 +1,4 @@
-name: "Destroy Infrastructure"
+name: "Infrastructure Destroy"
 
 on:
   workflow_dispatch:  # Только ручной запуск по кнопке

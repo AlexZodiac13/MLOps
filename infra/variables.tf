@@ -22,6 +22,7 @@ variable "zone" {
 variable "network_id" {
   type        = string
   description = "VPC network id to create Airflow in"
+  default     = ""
 }
 
 variable "create_network" {
@@ -34,11 +35,6 @@ variable "subnet_ids" {
   type        = list(string)
   description = "List of subnet resource IDs to use when `create_network=false`. Leave empty to use created subnet when `create_network=true`."
   default     = []
-
-  validation {
-    condition     = alltrue([for s in var.subnet_ids : !can(regex("^\\d+\\.\\d+\\.\\d+\\.\\d+\\/\\d+$", s))])
-    error_message = "Each entry in 'subnet_ids' must be a subnet resource ID (e.g. 'b1g...'), not a CIDR like '10.0.0.0/24'."
-  }
 }
 
 
