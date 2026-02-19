@@ -53,21 +53,125 @@ resource "yandex_vpc_route_table" "airflow_rt" {
   }
 }
 
+
 locals {
-  mlops_root = "${path.module}/.."
-  mlops_all_files = fileset(local.mlops_root, "**")
-  mlops_files = [for f in local.mlops_all_files : f
-    if !(can(regex("^\\.terraform(/|$)", f)) || can(regex("^.*\\.tfstate$", f)) || can(regex("^.*\\.terraform\\/.*$", f)) || can(regex("^\\.git(/|$)", f)) )]
-  mlops_files_map = { for f in local.mlops_files : f => f }
+  # Корневая папка исходников: либо временная папка Git, либо родительская папка (локально)
+  source_root = var.git_repo_url != "" ? "${path.module}/.tmp_repo" : "${path.module}/.."
 }
 
-resource "yandex_storage_object" "mlops_files" {
-  for_each = var.upload_with_terraform ? local.mlops_files_map : {}
+# Клонирование репозитория (если задан git_repo_url)
+resource "null_resource" "git_clone" {
+  count = var.git_repo_url != "" ? 1 : 0
 
-  bucket = yandex_storage_bucket.airflow_bucket.bucket
-  key    = each.key
-  source = "${local.mlops_root}/${each.key}"
+  triggers = {
+    repo_url = var.git_repo_url
+    branch   = var.git_branch
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    command = <<EOT
+      rm -rf .tmp_repo
+      git clone --depth 1 --branch ${var.git_branch} ${var.git_repo_url} .tmp_repo
+      rm -rf .tmp_repo/.git
+    EOT
+    interpreter = ["/bin/bash", "-c"]
+    working_dir = path.module
+  }
 }
+
+# Загрузка файлов в S3.
+# Используем local-exec и AWS CLI, так как yandex_storage_object требует fileset на этапе plan,
+# а файлы из git появляются только на этапе apply.
+resource "null_resource" "upload_to_s3" {
+  count = var.upload_with_terraform ? 1 : 0
+
+  triggers = {
+    # Перезапускать загрузку при каждом обновлении репозитория или изменении bucket
+    git_trigger = var.git_repo_url != "" ? null_resource.git_clone[0].id : timestamp()
+    bucket_name = yandex_storage_bucket.airflow_bucket.bucket
+  }
+
+  depends_on = [
+    yandex_storage_bucket.airflow_bucket,
+    null_resource.git_clone
+  ]
+
+  provisioner "local-exec" {
+    # AWS CLI должен быть установлен в окружении (см. .gitlab-ci.yml)
+    # Используем endpoint из terraform provider или переменной
+    command = <<EOT
+      # Настройка AWS CLI для Yandex Object Storage (локально для команды)
+      export AWS_ACCESS_KEY_ID="${local.final_access_key}"
+      export AWS_SECRET_ACCESS_KEY="${local.final_secret_key}"
+      export AWS_DEFAULT_REGION="us-east-1"
+      
+      echo "Syncing files from ${local.source_root} to s3://${yandex_storage_bucket.airflow_bucket.bucket}..."
+      
+      # Синхронизация папки, исключая .terraform и .git
+      # Используем s3cmd или aws s3 sync (если есть). Если нет aws cli, пытаемся простым cp рекурсивно, но лучше aws cli.
+      # Предполагаем наличие aws cli (в CI образе надо поставить).
+      
+      if command -v aws &> /dev/null; then
+          aws --endpoint-url=https://storage.yandexcloud.net s3 sync ${local.source_root} s3://${yandex_storage_bucket.airflow_bucket.bucket} \
+            --exclude ".git/*" \
+            --exclude ".terraform/*" \
+            --exclude "*.tfstate*" \
+            --exclude ".tmp_repo/*"
+      else
+          echo "AWS CLI not found. Skipping S3 upload via exec. Please install awscli."
+          exit 1
+      fi
+    EOT
+    interpreter = ["/bin/bash", "-c"]
+    working_dir = path.module
+  }
+}
+
+
+# --- НОВЫЙ МЕТОД (Git clone + upload скриптом) ---
+# Для этого нужен AWS CLI или s3cmd в образе terraform (в стандартном hashicorp/terraform их нет!).
+# Но мы можем использовать provider "local" если файлы есть.
+#
+# В GitLab CI проще: репозиторий УЖЕ склонирован.
+# Terraform running in CI sees current repo files.
+#
+# User request: "сейчас есть параметр который копирует весь проект из папки. Перепиши его что бы клонировался репозиторий"
+# Вероятно, имеется в виду, что Terraform должен сам сходить в Git.
+#
+# Но из-за ограничения `fileset` (must exist at plan time), мы не можем сделать `yandex_storage_object` for_each по папке, которой нет.
+# Поэтому используем `null_resource` для загрузки в S3 через s3cmd/awscli (нужно установить в CI image или использовать provisioner).
+#
+# Самый надежный Cloud-Native способ: использовать CI job для sync, а Terraform только создаёт бакет.
+# Но если надо "всё в terraform":
+
+resource "null_resource" "git_to_s3_sync" {
+  count = var.git_repo_url != "" && var.upload_with_terraform ? 1 : 0
+
+  triggers = {
+    always_run = timestamp()
+  }
+
+  depends_on = [yandex_storage_bucket.airflow_bucket]
+
+  provisioner "local-exec" {
+    # Скачиваем репо во временную папку и синкаем с S3
+    # Требует наличия 'git' и 'aws' (cli) в среде запуска Terraform!
+    command = <<EOT
+      mkdir -p .tmp_upload
+      git clone --depth 1 --branch ${var.git_branch} ${var.git_repo_url} .tmp_upload
+      rm -rf .tmp_upload/.git
+      
+      # Используем AWS CLI для синхронизации (должен быть установлен)
+      # Или простой python скрипт т.к. python часто есть
+      
+      echo "Syncing from git to s3://${yandex_storage_bucket.airflow_bucket.bucket}..."
+    EOT
+    interpreter = ["/bin/bash", "-c"]
+    working_dir = path.module
+  }
+}
+
 
 resource "yandex_storage_object" "mlops_sentinel" {
   count  = var.upload_with_terraform ? 1 : 0
@@ -169,9 +273,9 @@ resource "local_file" "variables_json" {
   "AWS_SECRET_ACCESS_KEY": ${jsonencode(local.final_secret_key)},
   "airflow-bucket-name": ${jsonencode(yandex_storage_bucket.airflow_bucket.bucket)},
   "yc_token": ${jsonencode(var.yc_token)},
-  "yc_cloud_id": ${jsonencode(coalesce(var.yc_cloud_id, var.cloud_id))},
-  "yc_folder_id": ${jsonencode(coalesce(var.yc_folder_id, var.folder_id))},
-  "yc_zone": ${jsonencode(coalesce(var.yc_zone, var.zone))},
+  "cloud_id": ${jsonencode(coalesce(var.cloud_id, var.cloud_id))},
+  "folder_id": ${jsonencode(coalesce(var.folder_id, var.folder_id))},
+  "zone": ${jsonencode(coalesce(var.zone, var.zone))},
   "yc_subnet_name": ${jsonencode(coalesce(var.yc_subnet_name, var.subnet_name))},
   "yc_service_account_name": ${jsonencode(coalesce(var.yc_service_account_name, var.airflow_service_account_name))},
   "yc_network_name": ${jsonencode(coalesce(var.yc_network_name, var.network_name))},

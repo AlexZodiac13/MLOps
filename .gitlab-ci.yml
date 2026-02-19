@@ -1,0 +1,53 @@
+stages:
+  - validate
+  - plan
+  - apply
+  - destroy
+
+image:
+  name: hashicorp/terraform:1.6
+  entrypoint:
+    - '/usr/bin/env'
+    - 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+# Устанавливаем git и curl, а также AWS CLI v2 для синхронизации файлов в S3
+before_script:
+  - apk add --update git curl bash python3 py3-pip
+  - pip3 install awscli --break-system-packages
+  - cd ${TF_ROOT}
+  - terraform --version
+  - terraform init -backend-config="access_key=${AWS_ACCESS_KEY_ID}" -backend-config="secret_key=${AWS_SECRET_ACCESS_KEY}"
+
+validate:
+  stage: validate
+  script:
+    - terraform validate
+
+plan:
+  stage: plan
+  script:
+    - terraform plan -out=tfplan
+  artifacts:
+    name: tfplan
+    paths:
+      - ${TF_ROOT}/tfplan
+
+apply:
+  stage: apply
+  script:
+    - terraform apply -auto-approve tfplan
+  dependencies:
+    - plan
+  when: manual  # Запуск по кнопке
+  only:
+    - main
+    - master
+
+destroy:
+  stage: destroy
+  script:
+    - terraform destroy -auto-approve
+  when: manual  # Запуск по кнопке
+  only:
+    - main
+    - master
