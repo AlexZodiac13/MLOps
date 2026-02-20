@@ -45,11 +45,7 @@ def evaluate():
         for art in artifacts:
             if art.path.endswith("q4_k_m.gguf"):
                 print(f"Found GGUF artifact: {art.path}. Downloading...")
-                gguf_path = mlfow.artifacts.download_artifacts(run_id=run_id, artifact_path=art.path)
-                break
-
-        if gguf_path:
-            print(f"Testing GGUF model using llama-cpp-python: {gguf_path}")
+            gguf_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=art.path)
             from llama_cpp import Llama
             llm = Llama(model_path=gguf_path, n_ctx=2048, n_threads=4, n_gpu_layers=0)
             

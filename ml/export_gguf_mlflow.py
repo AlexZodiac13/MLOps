@@ -38,17 +38,19 @@ def export_gguf():
 
     # 1. Clone llama.cpp if not present
     if not os.path.exists(llama_cpp_dir):
-        print("Cloning llama.cpp...")
-        subprocess.run(["git", "clone", "https://github.com/ggerganov/llama.cpp"], check=True)
+        print(f"Cloning llama.cpp into {work_dir}...")
+        subprocess.run(["git", "clone", "https://github.com/ggerganov/llama.cpp", llama_cpp_dir], check=True)
     
-    # 2. Build llama.cpp with cmake (faster if already built)
+    # 2. Build llama.cpp with cmake
     print("Building llama.cpp...")
     build_dir = os.path.join(llama_cpp_dir, "build")
     if not os.path.exists(build_dir):
-         os.makedirs(build_dir)
-         subprocess.run(["cmake", "-B", "build"], cwd=llama_cpp_dir, check=True)
+        os.makedirs(build_dir, exist_ok=True)
     
-    subprocess.run(["cmake", "--build", "build", "--config", "Release", "-j4"], cwd=llama_cpp_dir, check=True)
+    # Run cmake explicitly in the llama.cpp directory
+    subprocess.run(["cmake", "-B", "build"], cwd=llama_cpp_dir, check=True)
+    # Build with fewer threads if on c2-m4 to avoid OOM
+    subprocess.run(["cmake", "--build", "build", "--config", "Release", "-j2"], cwd=llama_cpp_dir, check=True)
 
     # 3. Convert to GGUF (f16)
     print(f"Converting HF model to GGUF f16...")

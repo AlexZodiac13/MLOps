@@ -199,7 +199,15 @@ resource "yandex_airflow_cluster" "airflow" {
     "boto3",
     "botocore",
     "llama-cpp-python",
-    "cmake"
+    "cmake",
+    "torch",
+    "transformers",
+    "datasets",
+    "accelerate",
+    "peft",
+    "bitsandbytes",
+    "trl",
+    "scikit-learn"
   ]
 
 

@@ -33,51 +33,68 @@ default_args = {
 def start_mlflow_server(**kwargs):
     """
     Starts an MLflow tracking server in the background.
-    Storing the process ID (PID) in XCom to kill it later.
+    Storing the process ID (PID) and URI in XCom.
     """
-    # Environment for MLflow server (important for artifact store)
+    # Try to kill any of our previous mlflow instances
+    try:
+        print("Attempting to kill previous MLflow instances...")
+        subprocess.run(["pkill", "-u", os.getlogin(), "-f", "mlflow server"], check=False)
+        time.sleep(2)
+    except Exception as e:
+        print(f"pkill failed (non-critical): {e}")
+
+    # Find an available port
+    import socket
+    port = 5000
+    while port < 5050:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(('127.0.0.1', port)) != 0:
+                break
+            print(f"Port {port} is busy, trying next...")
+            port += 1
+    
+    tracking_uri = f"http://127.0.0.1:{port}"
+    print(f"Selected Port: {port}")
+
+    # Environment for MLflow server
     env = os.environ.copy()
     env["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
     env["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
     env["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
 
-    # Tracking storage: Using local sqlite for experiment metadata (volatile if ephemeral)
-    # Artifact storage: Using MinIO (S3 bucket: otus)
-    # Using 'python3 -m mlflow' to avoid Permission Denied on the binary
     cmd = [
         "python3", "-m", "mlflow", "server",
-        "--backend-store-uri", "sqlite:////tmp/mlflow.db",
-        "--default-artifact-root", "s3://otus/mlflow/artifacts", # 'otus' is the bucket
+        "--backend-store-uri", f"sqlite:////tmp/mlflow_{port}.db",
+        "--default-artifact-root", "s3://otus/mlflow/artifacts",
         "--host", "0.0.0.0",
-        "--port", "5000"
+        "--port", str(port)
     ]
     
     print(f"Starting MLflow server: {' '.join(cmd)}")
-    
-    # Redirect output to a log file in /tmp to see why it fails
-    log_file = open("/tmp/mlflow_server.log", "w")
+    log_file = open(f"/tmp/mlflow_server_{port}.log", "w")
     process = subprocess.Popen(cmd, env=env, stdout=log_file, stderr=subprocess.STDOUT)
     
-    # Give it a few seconds to boot up
     time.sleep(15)
     
     if process.poll() is not None:
         log_file.close()
-        with open("/tmp/mlflow_server.log", "r") as f:
-            content = f.read()
-            print("MLflow server log output:", flush=True)
-            print(content, flush=True)
-        raise Exception(f"MLflow server failed to start. Exit code: {process.returncode}")
+        with open(f"/tmp/mlflow_server_{port}.log", "r") as f:
+            print("MLflow server log output:\n", f.read())
+        raise Exception(f"MLflow server failed to start on port {port}. Exit code: {process.returncode}")
         
-    print(f"MLflow server started with PID: {process.pid}", flush=True)
-    return process.pid
+    print(f"MLflow server started with PID: {process.pid} at {tracking_uri}")
+    
+    # Push both PID and the actual URI to XCom
+    kwargs['ti'].xcom_push(key='mlflow_pid', value=process.pid)
+    kwargs['ti'].xcom_push(key='mlflow_uri', value=tracking_uri)
+    return tracking_uri
 
 def stop_mlflow_server(**kwargs):
     """
     Kills the MLflow server process using the PID from setup task.
     """
     ti = kwargs['ti']
-    pid = ti.xcom_pull(task_ids='setup_mlflow')
+    pid = ti.xcom_pull(task_ids='setup_mlflow', key='mlflow_pid')
     if pid:
         print(f"Stopping MLflow server with PID: {pid}")
         try:
@@ -86,33 +103,32 @@ def stop_mlflow_server(**kwargs):
         except ProcessLookupError:
             print("Process not found.")
     else:
-        print("No PID found to stop.")
+        print("No PID found in XCom.")
 
-def run_script(script_path, extra_env=None):
+def run_script(script_path, extra_env=None, **kwargs):
     """
     Helper to run training/testing scripts as a separate process.
     """
+    ti = kwargs['ti']
+    # Get the actual URI from the setup task
+    current_uri = ti.xcom_pull(task_ids='setup_mlflow', key='mlflow_uri') or MLFLOW_TRACKING_URI
+    
     env = os.environ.copy()
-    env["MLFLOW_TRACKING_URI"] = MLFLOW_TRACKING_URI
+    env["MLFLOW_TRACKING_URI"] = current_uri
     env["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
     env["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
     env["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
     if extra_env:
         env.update(extra_env)
 
-    # Use the same python as Airflow worker
     python_path = "python3" 
-    
-    # In Managed Airflow, DAGs and project files are typically in /opt/airflow/dags/
-    # We'll try to detect the root path relative to this DAG file.
     dag_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(dag_dir) # parent of 'dag' folder
+    project_root = os.path.dirname(dag_dir)
     
     cwd = Variable.get("project_root", default_var=project_root)
     full_path = os.path.join(cwd, script_path)
 
-    print(f"Project root detected as: {cwd}")
-    print(f"Running script: {full_path}")
+    print(f"Running script: {full_path} against {current_uri}")
     result = subprocess.run([python_path, full_path], env=env, capture_output=True, text=True, cwd=cwd)
     
     print("STDOUT:", result.stdout)
@@ -131,6 +147,12 @@ with DAG(
     catchup=False,
     tags=['mlflow', 'mlops', 'training'],
 ) as dag:
+
+    # 0. Install missing dependencies on worker
+    install_deps = BashOperator(
+        task_id='install_dependencies',
+        bash_command='pip install torch transformers datasets accelerate peft bitsandbytes trl scikit-learn mlflow boto3 cmake llama-cpp-python'
+    )
 
     # 1. Setup MLflow Tracking Server (Lifecycle start)
     setup_mlflow = PythonOperator(
@@ -188,5 +210,5 @@ with DAG(
     )
 
     # Dependency Chain
-    setup_mlflow >> train_model >> export_gguf >> test_model >> compare_results >> teardown_mlflow >> cleanup
+    install_deps >> setup_mlflow >> train_model >> export_gguf >> test_model >> compare_results >> teardown_mlflow >> cleanup
 

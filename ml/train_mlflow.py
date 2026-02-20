@@ -132,8 +132,8 @@ def train():
             artifact_path="model_hf"
         )
         
-        # Store the local path in a file for the next task
-        with open("merged_path.txt", "w") as f:
+        # Store the local path in a file for the next task (using /tmp/ for cluster compatibility)
+        with open("/tmp/merged_path.txt", "w") as f:
             f.write(os.path.abspath(merged_path))
         
         print("Done.")
