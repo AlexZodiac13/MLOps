@@ -74,7 +74,10 @@ def evaluate():
                 return tokenizer.decode(out[0], skip_special_tokens=True)
 
         # 2. Prepare small evaluation dataset
-        dataset = load_dataset("json", data_files="ml/labeled_dataset.json", split="train[:5]")
+        # In Managed Airflow, relative paths should be joined with the current script location
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        dataset_path = os.path.join(script_dir, "labeled_dataset.json")
+        dataset = load_dataset("json", data_files=dataset_path, split="train[:5]")
         
         # 3. Inference loop
         for sample in dataset:

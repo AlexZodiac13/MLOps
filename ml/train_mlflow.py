@@ -27,7 +27,8 @@ os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
 
 # Base Model (using a smaller model for CPU demonstration if needed, but keeping 3B as per request)
 MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"  # This may require a lot of RAM for training!
-DATASET_FILE = "ml/labeled_dataset.json"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATASET_FILE = os.path.join(SCRIPT_DIR, "labeled_dataset.json")
 
 def format_instruction(sample):
     system_prompt = """Ты — система для извлечения параметров напоминаний.
@@ -77,7 +78,7 @@ def train():
 
         # 3. Training Arguments (Minimal for proof of concept)
         training_args = SFTConfig(
-            output_dir="./results",
+            output_dir="/tmp/results",
             num_train_epochs=1,
             max_steps=10, # Short for demo
             per_device_train_batch_size=1,
@@ -116,10 +117,10 @@ def train():
             device_map="cpu", # Force CPU for merging if no GPU
             trust_remote_code=True
         )
-        model = PeftModel.from_pretrained(base_model, "./results")
+        model = PeftModel.from_pretrained(base_model, "/tmp/results")
         merged_model = model.merge_and_unload()
         
-        merged_path = "./model_merged"
+        merged_path = "/tmp/model_merged"
         merged_model.save_pretrained(merged_path)
         tokenizer.save_pretrained(merged_path)
         print(f"Merged model saved to {merged_path}")

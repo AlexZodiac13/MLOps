@@ -27,11 +27,12 @@ def export_gguf():
     else:
         run_id = MLFLOW_RUN_ID
 
-    cwd = os.getcwd()
-    merged_model_dir = os.path.join(cwd, "model_merged")
-    llama_cpp_dir = os.path.join(cwd, "llama.cpp")
-    gguf_f16 = "qwen2.5-3b-reminder-bot.gguf"
-    gguf_q4 = "qwen2.5-3b-reminder-bot-q4_k_m.gguf"
+    # Always clean work dir for GGUF export since Managed Airflow /opt/airflow/dags is read-only
+    work_dir = "/tmp"
+    merged_model_dir = os.path.join(work_dir, "model_merged")
+    llama_cpp_dir = os.path.join(work_dir, "llama.cpp")
+    gguf_f16 = os.path.join(work_dir, "qwen2.5-3b-reminder-bot.gguf")
+    gguf_q4 = os.path.join(work_dir, "qwen2.5-3b-reminder-bot-q4_k_m.gguf")
 
     print(f"Starting GGUF Export for Run: {run_id}")
 

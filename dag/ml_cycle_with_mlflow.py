@@ -17,7 +17,11 @@ MLFLOW_S3_ENDPOINT_URL = Variable.get("MLFLOW_S3_ENDPOINT_URL", default_var="htt
 # Using separate keys for MLflow/MinIO as requested
 AWS_ACCESS_KEY_ID = Variable.get("MINIO_ACCESS_KEY")
 AWS_SECRET_ACCESS_KEY = Variable.get("MINIO_SECRET_KEY")
-MLFLOW_PROJECT_DIR = "/opt/airflow/ml" # Current working directory for scripts
+
+# Compute base path for Managed Airflow environment
+DAG_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(DAG_DIR) # /opt/airflow/dags/
+MLFLOW_PROJECT_DIR = os.path.join(PROJECT_ROOT, "ml")
 
 # Airflow default arguments
 default_args = {
@@ -99,10 +103,15 @@ def run_script(script_path, extra_env=None):
     # Use the same python as Airflow worker
     python_path = "python3" 
     
-    # Run from the project root directory
-    cwd = Variable.get("project_root", default_var="/opt/airflow/")
+    # In Managed Airflow, DAGs and project files are typically in /opt/airflow/dags/
+    # We'll try to detect the root path relative to this DAG file.
+    dag_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(dag_dir) # parent of 'dag' folder
+    
+    cwd = Variable.get("project_root", default_var=project_root)
     full_path = os.path.join(cwd, script_path)
 
+    print(f"Project root detected as: {cwd}")
     print(f"Running script: {full_path}")
     result = subprocess.run([python_path, full_path], env=env, capture_output=True, text=True, cwd=cwd)
     
