@@ -27,9 +27,6 @@ with DAG(
 ) as dag:
 
     # 1. Clone/Pull Code
-    # Assuming the repo contains 'ml/' folder with scripts and dataset
-    # If not present, clone. If present, pull.
-    # We use environment variables for repo config
     t1_setup_code = BashOperator(
         task_id='setup_codebase',
         bash_command=f"""
@@ -44,15 +41,10 @@ with DAG(
             echo "Pulling latest changes..."
             cd {REPO_DIR} && git pull origin $BRANCH
         fi
-        
-        # Ensure scripts are executable or just run via python
-        ls -la {REPO_DIR}/ml
         """
     )
     
     # 2. Train (CPU Compatible)
-    # The script now auto-detects CPU/GPU.
-    # We point to the cloned repo paths: {REPO_DIR}/ml/train_script.py
     t2_train = BashOperator(
         task_id='train_model',
         bash_command=f"""
@@ -100,4 +92,16 @@ with DAG(
         execution_timeout=timedelta(hours=2)
     )
 
-    t1_setup_code >> t2_train >> t3_test >> t4_export
+    # 5. Compare & Register Model
+    t5_compare = BashOperator(
+        task_id='compare_and_register',
+        bash_command=f"""
+        cd {REPO_DIR}/ml && \
+        python3 compare_script.py
+        """,
+        env={
+            'PYTHONUNBUFFERED': '1'
+        }
+    )
+
+    t1_setup_code >> t2_train >> t3_test >> t4_export >> t5_compare
