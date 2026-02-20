@@ -12,9 +12,9 @@ import signal
 # Environment variables for MLflow and MinIO (S3)
 # These are used by both the MLflow server and the training/testing scripts.
 
-MLFLOW_TRACKING_URI = Variable.get("mlflow_tracking_uri", default_var="http://localhost:5000")
-MLFLOW_S3_ENDPOINT_URL = Variable.get("MLFLOW_S3_ENDPOINT_URL", default_var="https://s3.owgrant.su")
-BUCKET_NAME = Variable.get("MLFLOW_S3_BUCKET", default_var="otus")
+MLFLOW_TRACKING_URI = Variable.get("mlflow_tracking_uri", default_var="http://localhost:5000").strip()
+MLFLOW_S3_ENDPOINT_URL = Variable.get("MLFLOW_S3_ENDPOINT_URL", default_var="https://s3.owgrant.su").strip()
+BUCKET_NAME = Variable.get("MLFLOW_S3_BUCKET", default_var="otus").strip()
 
 # Cleanup: Ensure the endpoint doesn't contain the bucket name (common mistake)
 if MLFLOW_S3_ENDPOINT_URL.endswith(f"/{BUCKET_NAME}"):
@@ -22,12 +22,11 @@ if MLFLOW_S3_ENDPOINT_URL.endswith(f"/{BUCKET_NAME}"):
 elif MLFLOW_S3_ENDPOINT_URL.endswith("/"):
     MLFLOW_S3_ENDPOINT_URL = MLFLOW_S3_ENDPOINT_URL[:-1]
 
-MLFLOW_S3_IGNORE_TLS = Variable.get("MLFLOW_S3_IGNORE_TLS", default_var="false")
+MLFLOW_S3_IGNORE_TLS = Variable.get("MLFLOW_S3_IGNORE_TLS", default_var="false").strip()
 # Using separate keys for MLflow/MinIO as requested (with defaults to avoid crash if they aren't loaded yet)
-AWS_ACCESS_KEY_ID = Variable.get("MINIO_ACCESS_KEY", default_var="fake_access_key")
-AWS_SECRET_ACCESS_KEY = Variable.get("MINIO_SECRET_KEY", default_var="fake_secret_key")
-AWS_DEFAULT_REGION = Variable.get("AWS_DEFAULT_REGION", default_var="us-east-1") # Region for MinIO sig verification
-BUCKET_NAME = Variable.get("MLFLOW_S3_BUCKET", default_var="otus")
+AWS_ACCESS_KEY_ID = Variable.get("MINIO_ACCESS_KEY", default_var="fake_access_key").strip()
+AWS_SECRET_ACCESS_KEY = Variable.get("MINIO_SECRET_KEY", default_var="fake_secret_key").strip()
+AWS_DEFAULT_REGION = Variable.get("AWS_DEFAULT_REGION", default_var="us-east-1").strip() # Region for MinIO sig verification
 
 # Git configuration for data/code sync
 GIT_REPO_URL = Variable.get("git_repo_url", default_var="https://github.com/AlexZodiac13/MLOps.git")
@@ -80,6 +79,7 @@ def start_mlflow_server(**kwargs):
     env["MLFLOW_S3_IGNORE_TLS"] = MLFLOW_S3_IGNORE_TLS
     env["AWS_S3_ADDRESSING_STYLE"] = "path"
     env["MLFLOW_S3_BUCKET"] = BUCKET_NAME
+    env["BOTO3_CONFIG_S3_SIGNATURE_VERSION"] = "s3v4"
 
     cmd = [
         "python3", "-m", "mlflow", "server",
@@ -172,12 +172,21 @@ def run_script(script_path, extra_env=None, **kwargs):
     git_synced_path = ti.xcom_pull(task_ids='sync_git')
     
     env = os.environ.copy()
-    env["MLFLOW_TRACKING_URI"] = current_uri
-    env["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
-    env["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
-    env["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
+    env["MLFLOW_TRACKING_URI"] = str(current_uri).strip()
+    
+    # Extra S3 env cleanup to fix SignatureDoesNotMatch
+    env["MLFLOW_S3_ENDPOINT_URL"] = str(MLFLOW_S3_ENDPOINT_URL).strip()
+    env["AWS_ACCESS_KEY_ID"] = str(AWS_ACCESS_KEY_ID).strip()
+    env["AWS_SECRET_ACCESS_KEY"] = str(AWS_SECRET_ACCESS_KEY).strip()
+    env["MLFLOW_S3_BUCKET"] = str(BUCKET_NAME).strip()
+    env["AWS_DEFAULT_REGION"] = str(AWS_DEFAULT_REGION).strip()
+    env["MLFLOW_S3_IGNORE_TLS"] = str(MLFLOW_S3_IGNORE_TLS).strip()
+    # This specifically fixes many MinIO issues with signature V4 vs V2
+    env["AWS_S3_ADDRESSING_STYLE"] = "path"
+    env["BOTO3_CONFIG_S3_SIGNATURE_VERSION"] = "s3v4"
+
     if extra_env:
-        env.update(extra_env)
+        env.update({k: str(v).strip() for k, v in extra_env.items()})
 
     python_path = "python3" 
     
@@ -189,15 +198,10 @@ def run_script(script_path, extra_env=None, **kwargs):
     cwd = git_synced_path or Variable.get("project_root", default_var=project_root)
     full_path = os.path.join(cwd, script_path)
 
-    # Extra S3 env to fix SignatureDoesNotMatch
-    env["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
-    env["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
-    env["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
-    env["MLFLOW_S3_BUCKET"] = BUCKET_NAME
-    env["AWS_DEFAULT_REGION"] = AWS_DEFAULT_REGION
-    env["MLFLOW_S3_IGNORE_TLS"] = MLFLOW_S3_IGNORE_TLS
-    # This specifically fixes many MinIO issues with signature V4 vs V2
-    env["AWS_S3_ADDRESSING_STYLE"] = "path"
+    # Double check endpoint doesn't have bucket in it
+    clean_endpoint = env["MLFLOW_S3_ENDPOINT_URL"].rstrip("/")
+    if clean_endpoint.endswith(f"/{env['MLFLOW_S3_BUCKET']}"):
+        env["MLFLOW_S3_ENDPOINT_URL"] = clean_endpoint.replace(f"/{env['MLFLOW_S3_BUCKET']}", "")
 
     print(f"Project root used: {cwd}")
     print(f"Running script: {full_path} against {current_uri}")

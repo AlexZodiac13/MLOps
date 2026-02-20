@@ -1,5 +1,31 @@
 import os
 import json
+
+# --- CRITICAL S3 CONFIGURATION (Must be BEFORE mlflow imports) ---
+# Stripping to avoid whitespace issues from Airflow UI
+def _get_env_robust(key, default=None):
+    val = os.getenv(key, default)
+    return val.strip() if val else default
+
+# Force isolate from Yandex Cloud metadata/internal roles
+os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
+
+s3_endpoint = _get_env_robust("MLFLOW_S3_ENDPOINT_URL", "https://s3.owgrant.su")
+bucket = _get_env_robust("MLFLOW_S3_BUCKET", "otus")
+region = _get_env_robust("AWS_DEFAULT_REGION", "us-east-1")
+
+# Clean endpoint: must be https://domain.com (no /bucket)
+if s3_endpoint and f"/{bucket}" in s3_endpoint:
+    s3_endpoint = s3_endpoint.replace(f"/{bucket}", "").rstrip("/")
+
+os.environ["MLFLOW_S3_ENDPOINT_URL"] = s3_endpoint
+os.environ["AWS_ACCESS_KEY_ID"] = _get_env_robust("AWS_ACCESS_KEY_ID", "")
+os.environ["AWS_SECRET_ACCESS_KEY"] = _get_env_robust("AWS_SECRET_ACCESS_KEY", "")
+os.environ["AWS_DEFAULT_REGION"] = region
+os.environ["AWS_S3_ADDRESSING_STYLE"] = "path"
+# Explicitly force Signature Version 4
+os.environ["BOTO3_CONFIG_S3_SIGNATURE_VERSION"] = "s3v4"
+
 import torch
 import mlflow
 import mlflow.transformers
@@ -47,17 +73,16 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_FILE = os.path.join(SCRIPT_DIR, "labeled_dataset.json")
 
 def train():
-    # Final cleanup of S3 Endpoint and config
+    # Show sanitized debug info to help solve the signature issue
     s3_endpoint = os.getenv("MLFLOW_S3_ENDPOINT_URL", "")
     bucket = os.getenv("MLFLOW_S3_BUCKET", "otus")
     
-    if s3_endpoint.endswith(f"/{bucket}"):
-        s3_endpoint = s3_endpoint.replace(f"/{bucket}", "")
-    
-    os.environ["MLFLOW_S3_ENDPOINT_URL"] = s3_endpoint
-    os.environ["AWS_S3_ADDRESSING_STYLE"] = "path"
-    
-    print(f"[DEBUG] S3 Config: Endpoint={s3_endpoint}, Bucket={bucket}, Region={os.getenv('AWS_DEFAULT_REGION', 'us-east-1')}")
+    print(f"[DEBUG] Final Environment Check:")
+    print(f"  - Endpoint: {s3_endpoint}")
+    print(f"  - Bucket: {bucket}")
+    print(f"  - Region: {os.getenv('AWS_DEFAULT_REGION')}")
+    print(f"  - Keys Length: Access={len(os.getenv('AWS_ACCESS_KEY_ID',''))}, Secret={len(os.getenv('AWS_SECRET_ACCESS_KEY',''))}")
+    print(f"  - Signature V4: Forced {os.getenv('BOTO3_CONFIG_S3_SIGNATURE_VERSION')}")
 
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
