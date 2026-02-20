@@ -70,8 +70,10 @@ resource "yandex_storage_object" "project_files" {
   key          = "${var.dags_bucket_path}/${each.value}"
   source       = "${path.module}/../${each.value}"
   
-  # Форсируем обновление при изменении контента
-  content_base64 = filebase64("${path.module}/../${each.value}")
+  # Используем хеш файла в метаданных, чтобы Terraform видел изменения содержимого
+  metadata = {
+    file_hash = filemd5("${path.module}/../${each.value}")
+  }
   
   depends_on = [
     yandex_storage_bucket.airflow_bucket
