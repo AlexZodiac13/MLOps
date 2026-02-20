@@ -23,11 +23,18 @@ RUN pip install --no-cache-dir -r /requirements.txt
 
 # Install llama.cpp for GGUF conversion (CPU build by default for compatibility)
 # If you need GPU support, change -DGGML_CUDA=OFF to ON (requires nvcc)
+# We need to use root to install into /opt, or install into user home
+USER root
 WORKDIR /opt
 RUN git clone https://github.com/ggerganov/llama.cpp && \
     cd llama.cpp && \
     cmake -B build -DGGML_CUDA=OFF && \
     cmake --build build --config Release -j$(nproc)
+
+# Fix permissions
+RUN chown -R airflow:root /opt/llama.cpp
+
+USER airflow
 
 # Create directory separately to avoid permission issues
 RUN mkdir -p /opt/airflow/ml
