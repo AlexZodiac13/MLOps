@@ -3,6 +3,7 @@ import json
 import torch
 import mlflow
 import mlflow.transformers
+import importlib_metadata
 from datasets import load_dataset
 from transformers import (
     AutoModelForCausalLM,
@@ -152,9 +153,18 @@ def train():
 
         # 8. Save to MLflow
         print("Logging merged model to MLflow...")
+        # Explicitly define requirements to avoid MLflow trying to auto-infer and crashing on missing tensorflow
+        pip_requirements = [
+            f"torch=={torch.__version__}",
+            f"transformers=={importlib_metadata.version('transformers')}",
+            f"accelerate=={importlib_metadata.version('accelerate')}",
+            f"peft=={importlib_metadata.version('peft')}"
+        ]
+        
         mlflow.transformers.log_model(
             transformers_model={"model": merged_model, "tokenizer": tokenizer},
-            artifact_path="model_hf"
+            artifact_path="model_hf",
+            pip_requirements=pip_requirements
         )
         
         # Store the local path in a file for the next task (using /tmp/ for cluster compatibility)
