@@ -26,8 +26,11 @@ env:
   TF_VAR_network_id: ${{ secrets.NETWORK_ID }}
   TF_VAR_public_key: ${{ secrets.PUBLIC_KEY }}
   TF_VAR_private_key: ${{ secrets.PRIVATE_KEY }}
-  TF_VAR_aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  TF_VAR_aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  TF_VAR_aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  TF_VAR_aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  TF_VAR_minio_endpoint_url: ${{ secrets.MINIO_ENDPOINT_URL }}
+  TF_VAR_minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
+  TF_VAR_minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
   TF_VAR_git_repo_url: ${{ github.server_url }}/${{ github.repository }}.git
 
 jobs:

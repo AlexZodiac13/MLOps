@@ -91,13 +91,13 @@ variable "yc_service_account_name" {
   default = null
 }
 
-variable "aws_access_key" {
+variable "aws_access_key_id" {
   type    = string
   default = null
   sensitive = true
 }
 
-variable "aws_secret_key" {
+variable "aws_secret_access_key" {
   type    = string
   default = null
   sensitive = true

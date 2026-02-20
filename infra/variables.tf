@@ -136,3 +136,21 @@ variable "admin_password" {
   description = "Admin password for Airflow web UI (set in terraform.tfvars)"
   sensitive   = true
 }
+
+variable "minio_endpoint_url" {
+  type        = string
+  default     = "https://s3.owgrant.su/otus"
+  description = "MinIO (S3) Endpoint for MLflow artifacts"
+}
+
+variable "minio_access_key" {
+  type        = string
+  description = "MinIO (S3) Access Key"
+  sensitive   = true
+}
+
+variable "minio_secret_key" {
+  type        = string
+  description = "MinIO (S3) Secret Key"
+  sensitive   = true
+}

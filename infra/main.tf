@@ -263,8 +263,8 @@ locals {
   
   # Determine which keys to use: provided vars (from GitHub secrets) or generated resource
   # We prefer the generated SA key for Yandex-specific tasks (like sync) to avoid conflicts with backend secrets
-  sa_access_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].access_key, var.aws_access_key)
-  sa_secret_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].secret_key, var.aws_secret_key)
+  sa_access_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].access_key, var.aws_access_key_id)
+  sa_secret_key = try(yandex_iam_service_account_static_access_key.airflow_sa_key[0].secret_key, var.aws_secret_access_key)
 }
 
 resource "local_file" "variables_json" {
@@ -272,6 +272,9 @@ resource "local_file" "variables_json" {
 {
   "AWS_ACCESS_KEY_ID": ${jsonencode(coalesce(local.sa_access_key, "no_key"))},
   "AWS_SECRET_ACCESS_KEY": ${jsonencode(coalesce(local.sa_secret_key, "no_secret"))},
+  "MLFLOW_S3_ENDPOINT_URL": ${jsonencode(var.minio_endpoint_url)},
+  "MINIO_ACCESS_KEY": ${jsonencode(var.minio_access_key)},
+  "MINIO_SECRET_KEY": ${jsonencode(var.minio_secret_key)},
   "airflow-bucket-name": ${jsonencode(yandex_storage_bucket.airflow_bucket.bucket)},
   "yc_token": ${jsonencode(var.yc_token)},
   "cloud_id": ${jsonencode(var.cloud_id)},
