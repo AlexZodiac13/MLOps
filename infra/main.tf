@@ -66,9 +66,12 @@ resource "yandex_storage_object" "project_files" {
   # Перебираем все файлы в папках dag и ml относительно корня проекта
   for_each = fileset("${path.module}/..", "{dag,ml}/**/*")
   
-  bucket = yandex_storage_bucket.airflow_bucket.bucket
-  key    = "${var.dags_bucket_path}/${each.value}"
-  source = "${path.module}/../${each.value}"
+  bucket       = yandex_storage_bucket.airflow_bucket.bucket
+  key          = "${var.dags_bucket_path}/${each.value}"
+  source       = "${path.module}/../${each.value}"
+  
+  # Форсируем обновление при изменении контента
+  content_base64 = filebase64("${path.module}/../${each.value}")
   
   depends_on = [
     yandex_storage_bucket.airflow_bucket
