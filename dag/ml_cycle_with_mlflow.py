@@ -14,6 +14,7 @@ import signal
 
 MLFLOW_TRACKING_URI = Variable.get("mlflow_tracking_uri", default_var="http://localhost:5000")
 MLFLOW_S3_ENDPOINT_URL = Variable.get("MLFLOW_S3_ENDPOINT_URL", default_var="https://s3.owgrant.su/otus")
+# Using separate keys for MLflow/MinIO as requested
 AWS_ACCESS_KEY_ID = Variable.get("MINIO_ACCESS_KEY")
 AWS_SECRET_ACCESS_KEY = Variable.get("MINIO_SECRET_KEY")
 MLFLOW_PROJECT_DIR = "/opt/airflow/ml" # Current working directory for scripts
