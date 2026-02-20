@@ -36,20 +36,6 @@ MODEL_ID = os.getenv("MODEL_ID", "Qwen/Qwen2.5-0.5B-Instruct")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_FILE = os.path.join(SCRIPT_DIR, "labeled_dataset.json")
 
-def format_instruction(sample):
-    system_prompt = """Ты — система для извлечения параметров напоминаний.
-Твоя задача: извлечь текст, дату, время и периодичность из сообщения пользователя и вернуть JSON."""
-    
-    user_content = f"Context Date: {sample['context_date']}\nMessage: \"{sample['input']}\"\n\nJSON:"
-    assistant_content = json.dumps(sample['output'], ensure_ascii=False)
-    
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_content},
-        {"role": "assistant", "content": assistant_content}
-    ]
-    return {"messages": messages}
-
 def train():
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
@@ -63,16 +49,35 @@ def train():
 
         # 1. Prepare Dataset
         dataset = load_dataset("json", data_files=DATASET_FILE, split="train")
-        dataset = dataset.map(format_instruction)
         
-        # 2. Setup Quantization (Note: BitsAndBytes 4-bit requires CUDA, skipping for CPU training)
+        # 2. Setup Tokenizer and Model
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         tokenizer.pad_token = tokenizer.eos_token
+        
+        # Format messages according to chat template
+        def apply_template(sample):
+            system_prompt = """Ты — система для извлечения параметров напоминаний.
+Твоя задача: извлечь текст, дату, время и периодичность из сообщения пользователя и вернуть JSON."""
+            user_content = f"Context Date: {sample['context_date']}\nMessage: \"{sample['input']}\"\n\nJSON:"
+            assistant_content = json.dumps(sample['output'], ensure_ascii=False)
+            
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+                {"role": "assistant", "content": assistant_content}
+            ]
+            # Pre-format each example for training
+            text = tokenizer.apply_chat_template(messages, tokenize=False)
+            return {"text": text}
+
+        print("Formatting dataset...")
+        dataset = dataset.map(apply_template)
         
         # Load model logic (CPU fallback)
         device_map = {"": "cpu"}
         
         # Load in float32 for CPU training (float16 is not usually supported for CPU training backends)
+        print(f"Loading base model {MODEL_ID}...")
         model = AutoModelForCausalLM.from_pretrained(
             MODEL_ID,
             device_map=device_map,
@@ -100,7 +105,7 @@ def train():
             learning_rate=2e-4,
             logging_steps=2,
             max_length=512,
-            dataset_text_field="text",
+            dataset_text_field="text", # Points to our new column
             report_to="none", # We manually log to MLflow
             use_cpu=True,
             fp16=False,
@@ -113,8 +118,7 @@ def train():
             train_dataset=dataset,
             peft_config=peft_config,
             args=training_args,
-            processing_class=tokenizer,
-            formatting_func=lambda x: [tokenizer.apply_chat_template(m, tokenize=False) for m in x['messages']]
+            processing_class=tokenizer
         )
 
         print("Starting training...")

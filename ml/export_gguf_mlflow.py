@@ -2,6 +2,9 @@ import os
 import subprocess
 import mlflow
 import json
+import urllib.request
+import zipfile
+import io
 
 # Configuration
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
@@ -34,15 +37,23 @@ def export_gguf():
     work_dir = "/tmp"
     merged_model_dir = os.path.join(work_dir, "model_merged")
     llama_cpp_dir = os.path.join(work_dir, "llama.cpp")
-    gguf_f16 = os.path.join(work_dir, "qwen2.5-3b-reminder-bot.gguf")
-    gguf_q4 = os.path.join(work_dir, "qwen2.5-3b-reminder-bot-q4_k_m.gguf")
+    
+    # Use model name for artifacts
+    model_name = os.getenv("MODEL_ID", "qwen2.5-0.5b").split("/")[-1].lower()
+    gguf_f16 = os.path.join(work_dir, f"{model_name}-reminder-bot.gguf")
+    gguf_q4 = os.path.join(work_dir, f"{model_name}-reminder-bot-q4_k_m.gguf")
 
     print(f"Starting GGUF Export for Run: {run_id}")
 
-    # 1. Clone llama.cpp if not present
+    # 1. Download llama.cpp if not present (ZIP for environments without git)
     if not os.path.exists(llama_cpp_dir):
-        print(f"Cloning llama.cpp into {work_dir}...")
-        subprocess.run(["git", "clone", "https://github.com/ggerganov/llama.cpp", llama_cpp_dir], check=True)
+        print(f"Downloading llama.cpp into {work_dir}...")
+        zip_url = "https://github.com/ggerganov/llama.cpp/archive/refs/heads/master.zip"
+        with urllib.request.urlopen(zip_url) as response:
+            with zipfile.ZipFile(io.BytesIO(response.read())) as z:
+                z.extractall(work_dir)
+        # Rename from llama.cpp-master to llama.cpp
+        os.rename(os.path.join(work_dir, "llama.cpp-master"), llama_cpp_dir)
     
     # 2. Build llama.cpp with cmake
     print("Building llama.cpp...")
