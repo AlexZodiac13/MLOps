@@ -1,0 +1,28 @@
+# Core ML
+torch>=2.1.0 --index-url https://download.pytorch.org/whl/cu121
+transformers>=4.37.0
+accelerate>=0.27.0
+bitsandbytes>=0.42.0
+peft>=0.8.2
+datasets>=2.17.0
+pandas
+tqdm
+scipy
+sentencepiece
+protobuf
+ipykernel
+jupyter
+llama-cpp-python
+trl>=0.7.11
+scikit-learn
+
+# MLOps & Tracking
+mlflow>=2.10.0
+boto3
+pydantic
+psycopg2-binary
+
+# Airflow Providers
+apache-airflow-providers-postgres
+apache-airflow-providers-amazon
+apache-airflow-providers-docker
