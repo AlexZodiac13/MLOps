@@ -18,6 +18,10 @@ MLFLOW_S3_ENDPOINT_URL = Variable.get("MLFLOW_S3_ENDPOINT_URL", default_var="htt
 AWS_ACCESS_KEY_ID = Variable.get("MINIO_ACCESS_KEY")
 AWS_SECRET_ACCESS_KEY = Variable.get("MINIO_SECRET_KEY")
 
+# Git configuration for data/code sync
+GIT_REPO_URL = Variable.get("git_repo_url", default_var="https://github.com/AlexZodiac13/MLOps.git")
+GIT_BRANCH = Variable.get("git_branch", default_var="project-work")
+
 # Compute base path for Managed Airflow environment
 DAG_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(DAG_DIR) # /opt/airflow/dags/
@@ -105,6 +109,29 @@ def stop_mlflow_server(**kwargs):
     else:
         print("No PID found in XCom.")
 
+def sync_git(**kwargs):
+    """
+    Clones or pulls the latest code and data from Git to /tmp/ml_project.
+    Returns the final project path.
+    """
+    target_dir = "/tmp/ml_project"
+    print(f"Syncing Git Repo: {GIT_REPO_URL} (branch: {GIT_BRANCH}) to {target_dir}")
+    
+    if os.path.exists(target_dir):
+        print("Target directory exists. Pulling latest changes...")
+        try:
+            # Re-clone if it's not a git repo or something went wrong
+            subprocess.run(["git", "pull"], cwd=target_dir, check=True)
+        except Exception as e:
+            print(f"Pull failed, re-cloning: {e}")
+            subprocess.run(["rm", "-rf", target_dir], check=True)
+            subprocess.run(["git", "clone", "--branch", GIT_BRANCH, GIT_REPO_URL, target_dir], check=True)
+    else:
+        print("Cloning repository...")
+        subprocess.run(["git", "clone", "--branch", GIT_BRANCH, GIT_REPO_URL, target_dir], check=True)
+    
+    return target_dir
+
 def run_script(script_path, extra_env=None, **kwargs):
     """
     Helper to run training/testing scripts as a separate process.
@@ -112,6 +139,9 @@ def run_script(script_path, extra_env=None, **kwargs):
     ti = kwargs['ti']
     # Get the actual URI from the setup task
     current_uri = ti.xcom_pull(task_ids='setup_mlflow', key='mlflow_uri') or MLFLOW_TRACKING_URI
+    
+    # Check if we have a fresh project root from sync_git
+    git_synced_path = ti.xcom_pull(task_ids='sync_git')
     
     env = os.environ.copy()
     env["MLFLOW_TRACKING_URI"] = current_uri
@@ -122,12 +152,16 @@ def run_script(script_path, extra_env=None, **kwargs):
         env.update(extra_env)
 
     python_path = "python3" 
+    
+    # Detect the root path
     dag_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(dag_dir)
     
-    cwd = Variable.get("project_root", default_var=project_root)
+    # Priority: 1. Git synced path, 2. Airflow Variable, 3. Relative to DAG
+    cwd = git_synced_path or Variable.get("project_root", default_var=project_root)
     full_path = os.path.join(cwd, script_path)
 
+    print(f"Project root used: {cwd}")
     print(f"Running script: {full_path} against {current_uri}")
     result = subprocess.run([python_path, full_path], env=env, capture_output=True, text=True, cwd=cwd)
     
@@ -154,34 +188,42 @@ with DAG(
         bash_command='pip install torch transformers datasets accelerate peft bitsandbytes trl scikit-learn mlflow boto3 cmake llama-cpp-python'
     )
 
-    # 1. Setup MLflow Tracking Server (Lifecycle start)
+    # 1. Sync Latest Code and Data from Git
+    # We do this at runtime to ensure we have the absolute latest labeled_dataset.json 
+    # and training script versions.
+    sync_git_task = PythonOperator(
+        task_id='sync_git',
+        python_callable=sync_git,
+    )
+
+    # 2. Setup MLflow Tracking Server (Lifecycle start)
     setup_mlflow = PythonOperator(
         task_id='setup_mlflow',
         python_callable=start_mlflow_server,
     )
 
-    # 2. Train Model
+    # 3. Train Model
     train_model = PythonOperator(
         task_id='train_model',
         python_callable=run_script,
         op_kwargs={'script_path': 'ml/train_mlflow.py'}
     )
 
-    # 3. Export to GGUF (Optimization for target hardware)
+    # 4. Export to GGUF (Optimization for target hardware)
     export_gguf = PythonOperator(
         task_id='export_gguf',
         python_callable=run_script,
         op_kwargs={'script_path': 'ml/export_gguf_mlflow.py'}
     )
 
-    # 4. Test/Evaluate Model
+    # 5. Test/Evaluate Model
     test_model = PythonOperator(
         task_id='test_model',
         python_callable=run_script,
         op_kwargs={'script_path': 'ml/test_mlflow.py'}
     )
 
-    # 5. Compare Results (Dummy compare or search MLflow)
+    # 6. Compare Results (Dummy compare or search MLflow)
     def compare_runs(**kwargs):
         # In a real scenario, we'd query MLflow for the best run in the experiment
         # and compare current metrics.
@@ -194,7 +236,7 @@ with DAG(
         python_callable=compare_runs,
     )
 
-    # 6. Teardown MLflow Server (Lifecycle end)
+    # 7. Teardown MLflow Server (Lifecycle end)
     # Using trigger_rule='all_done' to ensure it runs even if training fails
     teardown_mlflow = PythonOperator(
         task_id='teardown_mlflow',
@@ -202,13 +244,13 @@ with DAG(
         trigger_rule='all_done', 
     )
 
-    # 7. Cleanup local results
+    # 8. Cleanup local results
     cleanup = BashOperator(
         task_id='cleanup',
-        bash_command='rm -rf /opt/airflow/results /opt/airflow/model_merged',
+        bash_command='rm -rf /opt/airflow/results /opt/airflow/model_merged /tmp/ml_project',
         trigger_rule='all_done'
     )
 
     # Dependency Chain
-    install_deps >> setup_mlflow >> train_model >> export_gguf >> test_model >> compare_results >> teardown_mlflow >> cleanup
+    install_deps >> sync_git_task >> setup_mlflow >> train_model >> export_gguf >> test_model >> compare_results >> teardown_mlflow >> cleanup
 

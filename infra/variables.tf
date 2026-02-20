@@ -113,12 +113,12 @@ variable "airflow_service_account_name" {
 
 variable "scheduler_resource_preset" {
   type    = string
-  default = "c2-m4"
+  default = "c8-m16"
 }
 
 variable "worker_resource_preset" {
   type    = string
-  default = "c2-m4"
+  default = "c4-m8"
 }
 
 variable "worker_disk_size_gb" {
