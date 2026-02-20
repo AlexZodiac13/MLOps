@@ -55,30 +55,9 @@ resource "yandex_vpc_route_table" "airflow_rt" {
 
 
 locals {
-  # Корневая папка исходников: либо временная папка Git, либо родительская папка (локально)
-  source_root = var.git_repo_url != "" ? "${path.module}/.tmp_repo" : "${path.module}/.."
+  # Корневая папка исходников: родительская папка (локально)
+  source_root = "${path.module}/.."
   mlops_root  = "${path.module}/.."
-}
-
-# Клонирование репозитория (если задан git_repo_url)
-resource "null_resource" "git_clone" {
-  count = var.git_repo_url != "" ? 1 : 0
-
-  triggers = {
-    repo_url = var.git_repo_url
-    branch   = var.git_branch
-    always_run = timestamp()
-  }
-
-  provisioner "local-exec" {
-    command = <<EOT
-      rm -rf .tmp_repo
-      git clone --depth 1 --branch ${var.git_branch} ${var.git_repo_url} .tmp_repo
-      rm -rf .tmp_repo/.git
-    EOT
-    interpreter = ["/bin/bash", "-c"]
-    working_dir = path.module
-  }
 }
 
 # Загрузка файлов в S3 нативными средствами Terraform.
@@ -95,51 +74,6 @@ resource "yandex_storage_object" "project_files" {
     yandex_storage_bucket.airflow_bucket
   ]
 }
-
-
-# --- НОВЫЙ МЕТОД (Git clone + upload скриптом) ---
-# Для этого нужен AWS CLI или s3cmd в образе terraform (в стандартном hashicorp/terraform их нет!).
-# Но мы можем использовать provider "local" если файлы есть.
-#
-# В GitLab CI проще: репозиторий УЖЕ склонирован.
-# Terraform running in CI sees current repo files.
-#
-# User request: "сейчас есть параметр который копирует весь проект из папки. Перепиши его что бы клонировался репозиторий"
-# Вероятно, имеется в виду, что Terraform должен сам сходить в Git.
-#
-# Но из-за ограничения `fileset` (must exist at plan time), мы не можем сделать `yandex_storage_object` for_each по папке, которой нет.
-# Поэтому используем `null_resource` для загрузки в S3 через s3cmd/awscli (нужно установить в CI image или использовать provisioner).
-#
-# Самый надежный Cloud-Native способ: использовать CI job для sync, а Terraform только создаёт бакет.
-# Но если надо "всё в terraform":
-
-resource "null_resource" "git_to_s3_sync" {
-  count = var.git_repo_url != "" && var.upload_with_terraform ? 1 : 0
-
-  triggers = {
-    always_run = timestamp()
-  }
-
-  depends_on = [yandex_storage_bucket.airflow_bucket]
-
-  provisioner "local-exec" {
-    # Скачиваем репо во временную папку и синкаем с S3
-    # Требует наличия 'git' и 'aws' (cli) в среде запуска Terraform!
-    command = <<EOT
-      mkdir -p .tmp_upload
-      git clone --depth 1 --branch ${var.git_branch} ${var.git_repo_url} .tmp_upload
-      rm -rf .tmp_upload/.git
-      
-      # Используем AWS CLI для синхронизации (должен быть установлен)
-      # Или простой python скрипт т.к. python часто есть
-      
-      echo "Syncing from git to s3://${yandex_storage_bucket.airflow_bucket.bucket}..."
-    EOT
-    interpreter = ["/bin/bash", "-c"]
-    working_dir = path.module
-  }
-}
-
 
 resource "yandex_storage_object" "mlops_sentinel" {
   count  = var.upload_with_terraform ? 1 : 0

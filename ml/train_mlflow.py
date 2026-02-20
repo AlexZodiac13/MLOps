@@ -25,6 +25,10 @@ os.environ["AWS_DEFAULT_REGION"] = region
 os.environ["AWS_S3_ADDRESSING_STYLE"] = "path"
 # Explicitly force Signature Version 4
 os.environ["BOTO3_CONFIG_S3_SIGNATURE_VERSION"] = "s3v4"
+# Additional MinIO/S3 compatibility fixes
+os.environ["S3_USE_SIGV4"] = "True"
+os.environ["AWS_SESSION_TOKEN"] = "" # Clear in case of inherited garbage
+os.environ["AWS_CA_BUNDLE"] = os.getenv("MLFLOW_S3_CERT_PATH", "") # Support custom certs if any
 
 import torch
 import mlflow

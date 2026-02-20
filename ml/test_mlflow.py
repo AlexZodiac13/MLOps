@@ -1,6 +1,18 @@
 import os
 import json
 import torch
+
+# --- CRITICAL S3 CONFIGURATION ---
+def _get_env_robust(key, default=None):
+    val = os.getenv(key, default)
+    return val.strip() if val else default
+
+os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
+os.environ["AWS_S3_ADDRESSING_STYLE"] = "path"
+os.environ["BOTO3_CONFIG_S3_SIGNATURE_VERSION"] = "s3v4"
+os.environ["S3_USE_SIGV4"] = "True"
+os.environ["AWS_SESSION_TOKEN"] = ""
+
 import mlflow
 import mlflow.transformers
 import pandas as pd
@@ -8,15 +20,15 @@ from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from sklearn.metrics import accuracy_score
 
-# Configuration from environment (passed by Airflow)
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
-MLFLOW_S3_ENDPOINT_URL = os.getenv("MLFLOW_S3_ENDPOINT_URL")
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "ReminderBot_Training")
-MLFLOW_RUN_ID = os.getenv("MLFLOW_RUN_ID") # The ID of the run we just did for training
+# Configuration from environment
+MLFLOW_TRACKING_URI = _get_env_robust("MLFLOW_TRACKING_URI", "http://localhost:5000")
+MLFLOW_S3_ENDPOINT_URL = _get_env_robust("MLFLOW_S3_ENDPOINT_URL", "https://s3.owgrant.su")
+AWS_ACCESS_KEY_ID = _get_env_robust("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY = _get_env_robust("AWS_SECRET_ACCESS_KEY", "")
+MLFLOW_EXPERIMENT_NAME = _get_env_robust("MLFLOW_EXPERIMENT_NAME", "ReminderBot_Training")
+MLFLOW_RUN_ID = _get_env_robust("MLFLOW_RUN_ID")
 
-# Set storage environment variables for MLflow artifacts (only if defined to avoid crash)
+# Set storage environment variables
 if MLFLOW_S3_ENDPOINT_URL:
     os.environ["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
 if AWS_ACCESS_KEY_ID:

@@ -184,6 +184,8 @@ def run_script(script_path, extra_env=None, **kwargs):
     # This specifically fixes many MinIO issues with signature V4 vs V2
     env["AWS_S3_ADDRESSING_STYLE"] = "path"
     env["BOTO3_CONFIG_S3_SIGNATURE_VERSION"] = "s3v4"
+    env["S3_USE_SIGV4"] = "True"
+    env["AWS_SESSION_TOKEN"] = ""
 
     if extra_env:
         env.update({k: str(v).strip() for k, v in extra_env.items()})
