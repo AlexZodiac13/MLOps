@@ -17,6 +17,7 @@ from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 # Configuration from environment (passed by Airflow)
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 MLFLOW_S3_ENDPOINT_URL = os.getenv("MLFLOW_S3_ENDPOINT_URL")
+MLFLOW_S3_BUCKET = os.getenv("MLFLOW_S3_BUCKET", "otus")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "ReminderBot_Training")
@@ -34,6 +35,8 @@ if os.getenv("MLFLOW_S3_IGNORE_TLS"):
      os.environ["MLFLOW_S3_IGNORE_TLS"] = os.getenv("MLFLOW_S3_IGNORE_TLS")
 if os.getenv("AWS_S3_ADDRESSING_STYLE"):
      os.environ["AWS_S3_ADDRESSING_STYLE"] = os.getenv("AWS_S3_ADDRESSING_STYLE")
+if MLFLOW_S3_BUCKET:
+     os.environ["MLFLOW_S3_BUCKET"] = MLFLOW_S3_BUCKET
 
 # Base Model
 # IMPORTANT: For Managed Airflow with c2-m4 workers (4GB RAM), a 3B model will cause OOM (Exit Code -9).
@@ -44,6 +47,18 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_FILE = os.path.join(SCRIPT_DIR, "labeled_dataset.json")
 
 def train():
+    # Final cleanup of S3 Endpoint and config
+    s3_endpoint = os.getenv("MLFLOW_S3_ENDPOINT_URL", "")
+    bucket = os.getenv("MLFLOW_S3_BUCKET", "otus")
+    
+    if s3_endpoint.endswith(f"/{bucket}"):
+        s3_endpoint = s3_endpoint.replace(f"/{bucket}", "")
+    
+    os.environ["MLFLOW_S3_ENDPOINT_URL"] = s3_endpoint
+    os.environ["AWS_S3_ADDRESSING_STYLE"] = "path"
+    
+    print(f"[DEBUG] S3 Config: Endpoint={s3_endpoint}, Bucket={bucket}, Region={os.getenv('AWS_DEFAULT_REGION', 'us-east-1')}")
+
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
 

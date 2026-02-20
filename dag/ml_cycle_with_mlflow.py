@@ -13,7 +13,15 @@ import signal
 # These are used by both the MLflow server and the training/testing scripts.
 
 MLFLOW_TRACKING_URI = Variable.get("mlflow_tracking_uri", default_var="http://localhost:5000")
-MLFLOW_S3_ENDPOINT_URL = Variable.get("MLFLOW_S3_ENDPOINT_URL", default_var="https://s3.owgrant.su") # Base URL without bucket
+MLFLOW_S3_ENDPOINT_URL = Variable.get("MLFLOW_S3_ENDPOINT_URL", default_var="https://s3.owgrant.su")
+BUCKET_NAME = Variable.get("MLFLOW_S3_BUCKET", default_var="otus")
+
+# Cleanup: Ensure the endpoint doesn't contain the bucket name (common mistake)
+if MLFLOW_S3_ENDPOINT_URL.endswith(f"/{BUCKET_NAME}"):
+    MLFLOW_S3_ENDPOINT_URL = MLFLOW_S3_ENDPOINT_URL.replace(f"/{BUCKET_NAME}", "")
+elif MLFLOW_S3_ENDPOINT_URL.endswith("/"):
+    MLFLOW_S3_ENDPOINT_URL = MLFLOW_S3_ENDPOINT_URL[:-1]
+
 MLFLOW_S3_IGNORE_TLS = Variable.get("MLFLOW_S3_IGNORE_TLS", default_var="false")
 # Using separate keys for MLflow/MinIO as requested (with defaults to avoid crash if they aren't loaded yet)
 AWS_ACCESS_KEY_ID = Variable.get("MINIO_ACCESS_KEY", default_var="fake_access_key")
@@ -71,6 +79,7 @@ def start_mlflow_server(**kwargs):
     env["AWS_DEFAULT_REGION"] = AWS_DEFAULT_REGION
     env["MLFLOW_S3_IGNORE_TLS"] = MLFLOW_S3_IGNORE_TLS
     env["AWS_S3_ADDRESSING_STYLE"] = "path"
+    env["MLFLOW_S3_BUCKET"] = BUCKET_NAME
 
     cmd = [
         "python3", "-m", "mlflow", "server",
@@ -184,6 +193,7 @@ def run_script(script_path, extra_env=None, **kwargs):
     env["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
     env["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
     env["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
+    env["MLFLOW_S3_BUCKET"] = BUCKET_NAME
     env["AWS_DEFAULT_REGION"] = AWS_DEFAULT_REGION
     env["MLFLOW_S3_IGNORE_TLS"] = MLFLOW_S3_IGNORE_TLS
     # This specifically fixes many MinIO issues with signature V4 vs V2
