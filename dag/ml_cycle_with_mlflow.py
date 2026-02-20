@@ -79,7 +79,8 @@ def start_mlflow_server(**kwargs):
     env["MLFLOW_S3_IGNORE_TLS"] = MLFLOW_S3_IGNORE_TLS
     env["AWS_S3_ADDRESSING_STYLE"] = "path"
     env["MLFLOW_S3_BUCKET"] = BUCKET_NAME
-    env["BOTO3_CONFIG_S3_SIGNATURE_VERSION"] = "s3v4"
+    env["AWS_S3_SIGNATURE_VERSION"] = "s3v4"
+    env["AWS_S3_ADDRESSING_STYLE"] = "path"
 
     cmd = [
         "python3", "-m", "mlflow", "server",
@@ -183,7 +184,7 @@ def run_script(script_path, extra_env=None, **kwargs):
     env["MLFLOW_S3_IGNORE_TLS"] = str(MLFLOW_S3_IGNORE_TLS).strip()
     # This specifically fixes many MinIO issues with signature V4 vs V2
     env["AWS_S3_ADDRESSING_STYLE"] = "path"
-    env["BOTO3_CONFIG_S3_SIGNATURE_VERSION"] = "s3v4"
+    env["AWS_S3_SIGNATURE_VERSION"] = "s3v4"
     env["S3_USE_SIGV4"] = "True"
     env["AWS_SESSION_TOKEN"] = ""
 

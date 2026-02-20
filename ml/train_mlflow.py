@@ -24,7 +24,7 @@ os.environ["AWS_SECRET_ACCESS_KEY"] = _get_env_robust("AWS_SECRET_ACCESS_KEY", "
 os.environ["AWS_DEFAULT_REGION"] = region
 os.environ["AWS_S3_ADDRESSING_STYLE"] = "path"
 # Explicitly force Signature Version 4
-os.environ["BOTO3_CONFIG_S3_SIGNATURE_VERSION"] = "s3v4"
+os.environ["AWS_S3_SIGNATURE_VERSION"] = "s3v4"
 # Additional MinIO/S3 compatibility fixes
 os.environ["S3_USE_SIGV4"] = "True"
 os.environ["AWS_SESSION_TOKEN"] = "" # Clear in case of inherited garbage

@@ -68,12 +68,9 @@ resource "yandex_storage_object" "project_files" {
   
   bucket       = yandex_storage_bucket.airflow_bucket.bucket
   key          = "${var.dags_bucket_path}/${each.value}"
-  source       = "${path.module}/../${each.value}"
   
-  # Используем хеш файла в метаданных, чтобы Terraform видел изменения содержимого
-  metadata = {
-    file_hash = filemd5("${path.module}/../${each.value}")
-  }
+  # Используем content_base64 ВМЕСТО source для гарантированного отслеживания изменений в Terraform
+  content_base64 = filebase64("${path.module}/../${each.value}")
   
   depends_on = [
     yandex_storage_bucket.airflow_bucket
@@ -106,7 +103,13 @@ resource "yandex_airflow_cluster" "airflow" {
     "boto3",
     "botocore",
     "llama-cpp-python",
-    "cmake"
+    "cmake",
+    "transformers",
+    "datasets",
+    "accelerate",
+    "peft",
+    "trl",
+    "scikit-learn"
   ]
 
 
@@ -219,7 +222,7 @@ resource "yandex_storage_object" "airflow_variables_json" {
   bucket = yandex_storage_bucket.airflow_bucket.bucket
   # Загружаем в папку dag/, чтобы файл лежал рядом с import_variables.py
   key    = "dag/variables.json"
-  source = local_file.variables_json.filename
+  content = local_file.variables_json.content
   
   depends_on = [
     local_file.variables_json,
