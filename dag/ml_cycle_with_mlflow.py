@@ -13,10 +13,13 @@ import signal
 # These are used by both the MLflow server and the training/testing scripts.
 
 MLFLOW_TRACKING_URI = Variable.get("mlflow_tracking_uri", default_var="http://localhost:5000")
-MLFLOW_S3_ENDPOINT_URL = Variable.get("MLFLOW_S3_ENDPOINT_URL", default_var="https://s3.owgrant.su/otus")
+MLFLOW_S3_ENDPOINT_URL = Variable.get("MLFLOW_S3_ENDPOINT_URL", default_var="https://s3.owgrant.su") # Base URL without bucket
+MLFLOW_S3_IGNORE_TLS = Variable.get("MLFLOW_S3_IGNORE_TLS", default_var="false")
 # Using separate keys for MLflow/MinIO as requested (with defaults to avoid crash if they aren't loaded yet)
 AWS_ACCESS_KEY_ID = Variable.get("MINIO_ACCESS_KEY", default_var="fake_access_key")
 AWS_SECRET_ACCESS_KEY = Variable.get("MINIO_SECRET_KEY", default_var="fake_secret_key")
+AWS_DEFAULT_REGION = Variable.get("AWS_DEFAULT_REGION", default_var="us-east-1") # Region for MinIO sig verification
+BUCKET_NAME = Variable.get("MLFLOW_S3_BUCKET", default_var="otus")
 
 # Git configuration for data/code sync
 GIT_REPO_URL = Variable.get("git_repo_url", default_var="https://github.com/AlexZodiac13/MLOps.git")
@@ -65,11 +68,14 @@ def start_mlflow_server(**kwargs):
     env["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
     env["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
     env["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
+    env["AWS_DEFAULT_REGION"] = AWS_DEFAULT_REGION
+    env["MLFLOW_S3_IGNORE_TLS"] = MLFLOW_S3_IGNORE_TLS
+    env["AWS_S3_ADDRESSING_STYLE"] = "path"
 
     cmd = [
         "python3", "-m", "mlflow", "server",
         "--backend-store-uri", f"sqlite:////tmp/mlflow_{port}.db",
-        "--default-artifact-root", "s3://otus/mlflow/artifacts",
+        "--default-artifact-root", f"s3://{BUCKET_NAME}/mlflow/artifacts",
         "--host", "0.0.0.0",
         "--port", str(port)
     ]
@@ -173,6 +179,15 @@ def run_script(script_path, extra_env=None, **kwargs):
     # Priority: 1. Git synced path, 2. Airflow Variable, 3. Relative to DAG
     cwd = git_synced_path or Variable.get("project_root", default_var=project_root)
     full_path = os.path.join(cwd, script_path)
+
+    # Extra S3 env to fix SignatureDoesNotMatch
+    env["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
+    env["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
+    env["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
+    env["AWS_DEFAULT_REGION"] = AWS_DEFAULT_REGION
+    env["MLFLOW_S3_IGNORE_TLS"] = MLFLOW_S3_IGNORE_TLS
+    # This specifically fixes many MinIO issues with signature V4 vs V2
+    env["AWS_S3_ADDRESSING_STYLE"] = "path"
 
     print(f"Project root used: {cwd}")
     print(f"Running script: {full_path} against {current_uri}")

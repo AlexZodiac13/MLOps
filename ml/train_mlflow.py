@@ -28,6 +28,12 @@ if AWS_ACCESS_KEY_ID:
     os.environ["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
 if AWS_SECRET_ACCESS_KEY:
     os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
+if os.getenv("AWS_DEFAULT_REGION"):
+     os.environ["AWS_DEFAULT_REGION"] = os.getenv("AWS_DEFAULT_REGION")
+if os.getenv("MLFLOW_S3_IGNORE_TLS"):
+     os.environ["MLFLOW_S3_IGNORE_TLS"] = os.getenv("MLFLOW_S3_IGNORE_TLS")
+if os.getenv("AWS_S3_ADDRESSING_STYLE"):
+     os.environ["AWS_S3_ADDRESSING_STYLE"] = os.getenv("AWS_S3_ADDRESSING_STYLE")
 
 # Base Model
 # IMPORTANT: For Managed Airflow with c2-m4 workers (4GB RAM), a 3B model will cause OOM (Exit Code -9).
