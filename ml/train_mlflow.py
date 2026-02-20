@@ -20,13 +20,19 @@ AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "ReminderBot_Training")
 
-# Set storage environment variables for MLflow artifacts
-os.environ["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
-os.environ["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
-os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
+# Set storage environment variables for MLflow artifacts (only if defined to avoid crash)
+if MLFLOW_S3_ENDPOINT_URL:
+    os.environ["MLFLOW_S3_ENDPOINT_URL"] = MLFLOW_S3_ENDPOINT_URL
+if AWS_ACCESS_KEY_ID:
+    os.environ["AWS_ACCESS_KEY_ID"] = AWS_ACCESS_KEY_ID
+if AWS_SECRET_ACCESS_KEY:
+    os.environ["AWS_SECRET_ACCESS_KEY"] = AWS_SECRET_ACCESS_KEY
 
-# Base Model (using a smaller model for CPU demonstration if needed, but keeping 3B as per request)
-MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"  # This may require a lot of RAM for training!
+# Base Model
+# IMPORTANT: For Managed Airflow with c2-m4 workers (4GB RAM), a 3B model will cause OOM (Exit Code -9).
+# We use a 0.5B model for the lifecycle demonstration. 
+# For 3B model, please increase worker_resource_preset to at least c2-m16 in terraform.
+MODEL_ID = os.getenv("MODEL_ID", "Qwen/Qwen2.5-0.5B-Instruct") 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_FILE = os.path.join(SCRIPT_DIR, "labeled_dataset.json")
 
