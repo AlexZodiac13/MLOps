@@ -39,24 +39,33 @@ def start_mlflow_server(**kwargs):
 
     # Tracking storage: Using local sqlite for experiment metadata (volatile if ephemeral)
     # Artifact storage: Using MinIO (S3 bucket: otus)
+    # Using 'python3 -m mlflow' to avoid Permission Denied on the binary
     cmd = [
-        "mlflow", "server",
-        "--backend-store-uri", "sqlite:///mlflow.db",
+        "python3", "-m", "mlflow", "server",
+        "--backend-store-uri", "sqlite:////tmp/mlflow.db",
         "--default-artifact-root", "s3://otus/mlflow/artifacts", # 'otus' is the bucket
         "--host", "0.0.0.0",
         "--port", "5000"
     ]
     
     print(f"Starting MLflow server: {' '.join(cmd)}")
-    process = subprocess.Popen(cmd, env=env)
+    
+    # Redirect output to a log file in /tmp to see why it fails
+    log_file = open("/tmp/mlflow_server.log", "w")
+    process = subprocess.Popen(cmd, env=env, stdout=log_file, stderr=subprocess.STDOUT)
     
     # Give it a few seconds to boot up
-    time.sleep(10)
+    time.sleep(15)
     
     if process.poll() is not None:
-        raise Exception("MLflow server failed to start.")
+        log_file.close()
+        with open("/tmp/mlflow_server.log", "r") as f:
+            content = f.read()
+            print("MLflow server log output:", flush=True)
+            print(content, flush=True)
+        raise Exception(f"MLflow server failed to start. Exit code: {process.returncode}")
         
-    print(f"MLflow server started with PID: {process.pid}")
+    print(f"MLflow server started with PID: {process.pid}", flush=True)
     return process.pid
 
 def stop_mlflow_server(**kwargs):

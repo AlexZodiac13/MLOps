@@ -194,6 +194,14 @@ resource "yandex_airflow_cluster" "airflow" {
   airflow_version = var.airflow_version
   python_version  = var.python_version
 
+  pip_packages = [
+    "mlflow==2.10.2",
+    "boto3",
+    "botocore",
+    "llama-cpp-python",
+    "cmake"
+  ]
+
 
   webserver = {
     resource_preset_id = var.worker_resource_preset
@@ -257,6 +265,7 @@ locals {
   airflow_roles = [
     "storage.admin",
     "iam.serviceAccounts.user",
+    "viewer",
     # Required to allow the managed Airflow service to write metrics and integrate with monitoring
     "managed-airflow.integrationProvider"
   ]
