@@ -65,24 +65,32 @@ def train():
         dataset = load_dataset("json", data_files=DATASET_FILE, split="train")
         dataset = dataset.map(format_instruction)
         
-        # 2. Setup Quantization (even on CPU, 4-bit can save memory)
-        # Note: bitsandbytes 4-bit usually requires CUDA. For CPU training we might need to skip quantization or use other methods.
-        # But per user request we follow the notebook's logic.
-        
+        # 2. Setup Quantization (Note: BitsAndBytes 4-bit requires CUDA, skipping for CPU training)
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         tokenizer.pad_token = tokenizer.eos_token
         
         # Load model logic (CPU fallback)
-        device_map = "auto" if torch.cuda.is_available() else "cpu"
+        device_map = {"": "cpu"}
         
+        # Load in float32 for CPU training (float16 is not usually supported for CPU training backends)
         model = AutoModelForCausalLM.from_pretrained(
             MODEL_ID,
-            # quantization_config=bnb_config if torch.cuda.is_available() else None,
             device_map=device_map,
-            trust_remote_code=True
+            trust_remote_code=True,
+            torch_dtype=torch.float32
         )
 
-        # 3. Training Arguments (Minimal for proof of concept)
+        # 3. LoRA Configuration
+        peft_config = LoraConfig(
+            r=8,
+            lora_alpha=16,
+            target_modules=["q_proj", "v_proj"],
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+
+        # 4. Training Arguments
         training_args = SFTConfig(
             output_dir="/tmp/results",
             num_train_epochs=1,
@@ -93,13 +101,17 @@ def train():
             logging_steps=2,
             max_length=512,
             dataset_text_field="text",
-            report_to="none" # We manually log to MLflow
+            report_to="none", # We manually log to MLflow
+            use_cpu=True,
+            fp16=False,
+            bf16=False
         )
 
-        # 4. SFTTrainer
+        # 5. SFTTrainer
         trainer = SFTTrainer(
             model=model,
             train_dataset=dataset,
+            peft_config=peft_config,
             args=training_args,
             processing_class=tokenizer,
             formatting_func=lambda x: [tokenizer.apply_chat_template(m, tokenize=False) for m in x['messages']]
@@ -108,22 +120,25 @@ def train():
         print("Starting training...")
         train_result = trainer.train()
         
-        # 5. Log metrics
+        # 6. Log metrics
         mlflow.log_metric("train_loss", train_result.training_loss)
         print(f"Training loss: {train_result.training_loss}")
 
-        # 6. Merge Adapters for GGUF Export
+        # 7. Merge Adapters for GGUF Export
         print("Merging adapters...")
         from peft import PeftModel
         
-        # Reload for merging (in FP16 to save memory)
+        # Save lora first
+        trainer.model.save_pretrained("/tmp/lora_adapter")
+        
+        # Reload for merging (float32 for CPU compatibility)
         base_model = AutoModelForCausalLM.from_pretrained(
             MODEL_ID,
-            torch_dtype=torch.float16,
-            device_map="cpu", # Force CPU for merging if no GPU
+            torch_dtype=torch.float32,
+            device_map="cpu",
             trust_remote_code=True
         )
-        model = PeftModel.from_pretrained(base_model, "/tmp/results")
+        model = PeftModel.from_pretrained(base_model, "/tmp/lora_adapter")
         merged_model = model.merge_and_unload()
         
         merged_path = "/tmp/model_merged"
@@ -131,7 +146,7 @@ def train():
         tokenizer.save_pretrained(merged_path)
         print(f"Merged model saved to {merged_path}")
 
-        # 7. Save to MLflow
+        # 8. Save to MLflow
         print("Logging merged model to MLflow...")
         mlflow.transformers.log_model(
             transformers_model={"model": merged_model, "tokenizer": tokenizer},

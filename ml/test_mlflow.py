@@ -48,7 +48,10 @@ def evaluate():
         for art in artifacts:
             if art.path.endswith("q4_k_m.gguf"):
                 print(f"Found GGUF artifact: {art.path}. Downloading...")
-            gguf_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=art.path)
+                gguf_path = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=art.path)
+                break
+        
+        if gguf_path:
             from llama_cpp import Llama
             llm = Llama(model_path=gguf_path, n_ctx=2048, n_threads=4, n_gpu_layers=0)
             
@@ -61,13 +64,14 @@ def evaluate():
             # Fallback to HF Transformers if GGUF not found
             print("GGUF artifact not found. Falling back to HF Transformers.")
             model_uri = f"runs:/{run_id}/model_hf"
-            mlflow_model = mlflow.transformers.load_model(model_uri)
+            # Explicitly load on CPU with device_map
+            mlflow_model = mlflow.transformers.load_model(model_uri, device_map="cpu")
             model = mlflow_model['model']
             tokenizer = mlflow_model['tokenizer']
             
             def run_inference(text):
                 prompt = f"Context Date: 2026-02-18\nMessage: \"{text}\"\n\nJSON:"
-                inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+                inputs = tokenizer(prompt, return_tensors="pt").to("cpu")
                 with torch.no_grad():
                     out = model.generate(**inputs, max_new_tokens=50)
                 return tokenizer.decode(out[0], skip_special_tokens=True)

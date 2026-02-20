@@ -111,24 +111,37 @@ def stop_mlflow_server(**kwargs):
 
 def sync_git(**kwargs):
     """
-    Clones or pulls the latest code and data from Git to /tmp/ml_project.
-    Returns the final project path.
+    Downloads the latest code from GitHub as a ZIP archive (bypassing git binary permissions).
     """
+    import urllib.request
+    import zipfile
+    import io
+    import shutil
+
     target_dir = "/tmp/ml_project"
-    print(f"Syncing Git Repo: {GIT_REPO_URL} (branch: {GIT_BRANCH}) to {target_dir}")
+    # Construct GitHub ZIP URL: https://github.com/USER/REPO/archive/refs/heads/BRANCH.zip
+    # Support both https://github.com/user/repo and git@github.com:user/repo.git
+    clean_url = GIT_REPO_URL.replace(".git", "").replace("git@github.com:", "https://github.com/")
+    zip_url = f"{clean_url}/archive/refs/heads/{GIT_BRANCH}.zip"
+    
+    print(f"Downloading project source from: {zip_url}")
     
     if os.path.exists(target_dir):
-        print("Target directory exists. Pulling latest changes...")
-        try:
-            # Re-clone if it's not a git repo or something went wrong
-            subprocess.run(["git", "pull"], cwd=target_dir, check=True)
-        except Exception as e:
-            print(f"Pull failed, re-cloning: {e}")
-            subprocess.run(["rm", "-rf", target_dir], check=True)
-            subprocess.run(["git", "clone", "--branch", GIT_BRANCH, GIT_REPO_URL, target_dir], check=True)
-    else:
-        print("Cloning repository...")
-        subprocess.run(["git", "clone", "--branch", GIT_BRANCH, GIT_REPO_URL, target_dir], check=True)
+        shutil.rmtree(target_dir)
+    
+    try:
+        with urllib.request.urlopen(zip_url) as response:
+            with zipfile.ZipFile(io.BytesIO(response.read())) as zip_ref:
+                # GitHub zip contains a top-level folder like MLOps-project-work
+                namelist = zip_ref.namelist()
+                top_folder = namelist[0].split('/')[0]
+                zip_ref.extractall("/tmp")
+                # Move contents to target_dir
+                shutil.move(os.path.join("/tmp", top_folder), target_dir)
+        print(f"Project synced successfully to {target_dir}")
+    except Exception as e:
+        print(f"Sync failed: {e}")
+        raise
     
     return target_dir
 
@@ -163,14 +176,23 @@ def run_script(script_path, extra_env=None, **kwargs):
 
     print(f"Project root used: {cwd}")
     print(f"Running script: {full_path} against {current_uri}")
-    result = subprocess.run([python_path, full_path], env=env, capture_output=True, text=True, cwd=cwd)
     
-    print("STDOUT:", result.stdout)
-    if result.stderr:
-        print("STDERR:", result.stderr)
+    # Use Popen to stream logs in real-time
+    with subprocess.Popen(
+        [python_path, "-u", full_path], 
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=cwd,
+        bufsize=1
+    ) as process:
+        for line in process.stdout:
+            print(line, end="")
         
-    if result.returncode != 0:
-        raise Exception(f"Script {script_path} failed with return code {result.returncode}")
+        process.wait()
+        if process.returncode != 0:
+            raise Exception(f"Script {script_path} failed with return code {process.returncode}")
 
 # --- DAG Definition ---
 with DAG(

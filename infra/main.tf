@@ -81,51 +81,19 @@ resource "null_resource" "git_clone" {
   }
 }
 
-# Загрузка файлов в S3.
-# Используем local-exec и AWS CLI, так как yandex_storage_object требует fileset на этапе plan,
-# а файлы из git появляются только на этапе apply.
-resource "null_resource" "upload_to_s3" {
-  count = var.upload_with_terraform ? 1 : 0
-
-  triggers = {
-    # Перезапускать загрузку при каждом обновлении репозитория или изменении bucket
-    git_trigger = var.git_repo_url != "" ? null_resource.git_clone[0].id : timestamp()
-    bucket_name = yandex_storage_bucket.airflow_bucket.bucket
-  }
-
+# Загрузка файлов в S3 нативными средствами Terraform.
+# Это НЕ требует наличия awscli или pip на локальной машине.
+resource "yandex_storage_object" "project_files" {
+  # Перебираем все файлы в папках dag и ml относительно корня проекта
+  for_each = fileset("${path.module}/..", "{dag,ml}/**/*")
+  
+  bucket = yandex_storage_bucket.airflow_bucket.bucket
+  key    = "${var.dags_bucket_path}/${each.value}"
+  source = "${path.module}/../${each.value}"
+  
   depends_on = [
-    yandex_storage_bucket.airflow_bucket,
-    null_resource.git_clone
+    yandex_storage_bucket.airflow_bucket
   ]
-
-  provisioner "local-exec" {
-    # AWS CLI должен быть установлен в окружении (см. .gitlab-ci.yml)
-    # Используем endpoint из terraform provider или переменной
-    command = <<EOT
-      # Настройка AWS CLI для Yandex Object Storage (локально для команды)
-      export AWS_ACCESS_KEY_ID="${local.sa_access_key}"
-      export AWS_SECRET_ACCESS_KEY="${local.sa_secret_key}"
-      
-      echo "Syncing files from ${local.source_root} to s3://${yandex_storage_bucket.airflow_bucket.bucket}..."
-      
-      # Синхронизация папки, используя AWS CLI.
-      # Используем --region ru-central1 для Yandex Object Storage.
-      
-      if command -v aws &> /dev/null; then
-          aws --endpoint-url=https://storage.yandexcloud.net s3 sync ${local.source_root} s3://${yandex_storage_bucket.airflow_bucket.bucket} \
-            --region ru-central1 \
-            --exclude ".git/*" \
-            --exclude ".terraform/*" \
-            --exclude "*.tfstate*" \
-            --exclude ".tmp_repo/*"
-      else
-          echo "AWS CLI not found. Skipping S3 upload via exec. Please install awscli."
-          exit 1
-      fi
-    EOT
-    interpreter = ["/bin/bash", "-c"]
-    working_dir = path.module
-  }
 }
 
 
@@ -199,15 +167,7 @@ resource "yandex_airflow_cluster" "airflow" {
     "boto3",
     "botocore",
     "llama-cpp-python",
-    "cmake",
-    "torch",
-    "transformers",
-    "datasets",
-    "accelerate",
-    "peft",
-    "bitsandbytes",
-    "trl",
-    "scikit-learn"
+    "cmake"
   ]
 
 

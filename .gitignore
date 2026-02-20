@@ -6,6 +6,9 @@ infra/terraform.tfvars
 ml/llama.cpp
 ml/qwen2.5*
 ml/results
+infra/.tmp_repo
+infra/.tmp_upload
+infra/variables.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
