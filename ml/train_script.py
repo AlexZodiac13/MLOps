@@ -50,7 +50,7 @@ def train(data_path, model_id, output_dir, epochs=1):
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16,  # Changed from bfloat16 to float16
+                bnb_4bit_compute_dtype=torch.float16, 
                 bnb_4bit_use_double_quant=True,
             )
             quantization_config = bnb_config
@@ -95,7 +95,7 @@ def train(data_path, model_id, output_dir, epochs=1):
 
         # 5. Training Args
         use_fp16 = torch.cuda.is_available() # fp16 on CPU is sometimes slow or unsupported for optim
-        use_bf16 = False # bf16 on CPU might work on newer AVX512, but safer False default. Also avoiding it on GPU for compatibility.
+        use_bf16 = False 
         
         training_args = SFTConfig(
             output_dir=output_dir,
