@@ -108,7 +108,7 @@ def train(data_path, model_id, output_dir, epochs=1):
         )
 
         # 5. Training Args
-        use_fp16 = torch.cuda.is_available() # fp16 on CPU is sometimes slow or unsupported for optim
+        use_fp16 = False # torch.cuda.is_available() # DISABLE FP16 TO DEBUG
         use_bf16 = False 
         
         training_args = SFTConfig(
@@ -117,7 +117,7 @@ def train(data_path, model_id, output_dir, epochs=1):
             per_device_train_batch_size=1 if not torch.cuda.is_available() else 4, # Smaller batch on CPU
             gradient_accumulation_steps=8 if not torch.cuda.is_available() else 4,
             learning_rate=2e-4,
-            fp16=use_fp16, # Use True only if CUDA available
+            fp16=use_fp16, # False
             bf16=False, # Safe default for CPU and avoiding errors on some GPUs
             use_cpu=not torch.cuda.is_available(),
             logging_steps=10,
