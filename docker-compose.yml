@@ -142,9 +142,14 @@ services:
     command: celery worker --celery-hostname=celery@%h
     # Explicit hostname to fix Celery crash "AttributeError: 'NoneType' object has no attribute 'split'"
     hostname: airflow-worker
-    # GPU Configuration (Optional - will be ignored on CPU hosts if not available or just managed by driver)
-    # Removing 'deploy' block to ensure compatibility with CPU-only environments in Yandex Cloud.
-    # If GPU is needed, Docker engine must be configured with nvidia-runtime default.
+    # GPU Configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: always
     depends_on:
       airflow-init:
