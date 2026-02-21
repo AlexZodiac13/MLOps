@@ -86,6 +86,17 @@ def train(data_path, model_id, output_dir, epochs=1):
             # Enable gradients for LoRA adaptation on standard model
             model.enable_input_require_grads()
 
+        # FORCE CAST ANY SUSPICIOUS MODULES TO FLOAT32/FLOAT16
+        print("Explicitly casting LayerNorms and checking for BFloat16...")
+        for name, module in model.named_modules():
+            if "norm" in name.lower() or "ln" in name.lower():
+                module.to(torch.float32)
+            # Check params
+            for p_name, p in module.named_parameters(recurse=False):
+                if p.dtype == torch.bfloat16:
+                    print(f"Found BFloat16 parameter: {name}.{p_name}. Casting to Float16.")
+                    p.data = p.data.to(torch.float16)
+
         # 4. LoRA Config
         peft_config = LoraConfig(
             r=16,
