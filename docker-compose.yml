@@ -27,8 +27,8 @@ x-airflow-common: &airflow-common
     - ./infra/airflow/dags:/opt/airflow/dags
     - ./infra/airflow/logs:/opt/airflow/logs
     - ./infra/airflow/plugins:/opt/airflow/plugins
-    # We will clone repo inside, but for dev we might mount. User wants cloning.
-    # We'll remove the ./ml mount from here and rely on git clone in DAG or Operator.
+    # Mount local ML code for development, overriding the cloned repo if needed
+    - ./ml:/opt/airflow/ml_code
     - airflow-ml-data:/opt/airflow/ml
   depends_on:
     - postgres

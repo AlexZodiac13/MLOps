@@ -12,9 +12,16 @@ default_args = {
     'retries': 0,
 }
 
-ML_HOME = "/opt/airflow/ml"
-# When cloning inside container, we should clone into ML_HOME or a subdir
-REPO_DIR = "/opt/airflow/repo"
+if os.path.exists("/opt/airflow/ml_code/train_script.py"):
+    # Dev mode: use mounted code
+    REPO_DIR = "/opt/airflow/ml_code"
+    print(f"Using local development code mounted at {REPO_DIR}")
+else:
+    # Prod mode: clone from git
+    REPO_DIR = "/opt/airflow/repo/ml"
+    
+ML_HOME = "/opt/airflow/ml" # Artifacts output
+
 MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
 
 with DAG(
@@ -64,11 +71,19 @@ with DAG(
     t2_train = BashOperator(
         task_id='train_model',
         bash_command=f"""
-        cd {REPO_DIR}/ml && \
-        python3 train_script.py \
-          --data_path {REPO_DIR}/ml/labeled_dataset.json \
-          --output_dir {ML_HOME}/results \
-          --epochs 1 \
+        # If running from local mount (REPO_DIR == /opt/airflow/ml_code), prevent git commands from failing
+        if [[ "{REPO_DIR}" == "/opt/airflow/ml_code" ]]; then
+            echo "Skipping git operations for local dev mount..."
+            cd {REPO_DIR}
+        else
+            echo "Using cloned repository at {REPO_DIR}..."
+            cd {REPO_DIR}
+        fi
+
+        python3 train_script.py \\
+          --data_path {REPO_DIR}/labeled_dataset.json \\
+          --output_dir {ML_HOME}/results \\
+          --epochs 1 \\
           --model_id "{MODEL_ID}"
         """,
         env={
