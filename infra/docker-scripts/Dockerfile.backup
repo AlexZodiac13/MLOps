@@ -1,0 +1,12 @@
+FROM alpine:3.18
+
+RUN apk add --no-cache \
+    postgresql-client \
+    aws-cli \
+    bash \
+    curl
+
+COPY pg_s3_sync.sh /usr/local/bin/pg_s3_sync.sh
+RUN chmod +x /usr/local/bin/pg_s3_sync.sh
+
+entrypoint ["/usr/local/bin/pg_s3_sync.sh"]

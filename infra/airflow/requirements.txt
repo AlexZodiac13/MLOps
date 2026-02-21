@@ -1,5 +1,7 @@
 # Core ML
 torch>=2.1.0 --index-url https://download.pytorch.org/whl/cu121
+torchvision>=0.16.0 --index-url https://download.pytorch.org/whl/cu121
+torchaudio>=2.1.0 --index-url https://download.pytorch.org/whl/cu121
 transformers>=4.37.0
 accelerate>=0.27.0
 bitsandbytes>=0.42.0
@@ -17,12 +19,20 @@ trl>=0.7.11
 scikit-learn
 
 # MLOps & Tracking
+# Use standard versions, rely on airflow constraints where possible
+gunicorn
 mlflow>=2.10.0
 boto3
-pydantic
+pydantic>=2.0.0
+email-validator>=2.0.0
 psycopg2-binary
 
+# Airflow Core - PIN THIS TO AVOID BROKEN UPGRADES
+apache-airflow==2.10.0
+
 # Airflow Providers
+apache-airflow-providers-celery
+apache-airflow-providers-redis
 apache-airflow-providers-postgres
 apache-airflow-providers-amazon
 apache-airflow-providers-docker

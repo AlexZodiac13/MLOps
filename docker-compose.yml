@@ -1,17 +1,17 @@
-version: "3.8"
 
 x-airflow-common: &airflow-common
   build:
-    context: ./airflow
+    context: ./infra/airflow
     dockerfile: Dockerfile.ml
   environment: &airflow-environment
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
     AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/1
     AIRFLOW__CORE__FERNET_KEY: 46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__WEBSERVER__SECRET_KEY: 'secret_key_secret_key_secret_key_secret_key_secret_key_secret_key'
     AIRFLOW_UID: ${AIRFLOW_UID:-50000}
     # MLflow connectivity
     MLFLOW_TRACKING_URI: http://mlflow:5000
@@ -24,9 +24,9 @@ x-airflow-common: &airflow-common
     GIT_REPO_URL: ${GIT_REPO_URL}
     GIT_BRANCH: ${GIT_BRANCH}
   volumes:
-    - ./airflow/dags:/opt/airflow/dags
-    - ./airflow/logs:/opt/airflow/logs
-    - ./airflow/plugins:/opt/airflow/plugins
+    - ./infra/airflow/dags:/opt/airflow/dags
+    - ./infra/airflow/logs:/opt/airflow/logs
+    - ./infra/airflow/plugins:/opt/airflow/plugins
     # We will clone repo inside, but for dev we might mount. User wants cloning.
     # We'll remove the ./ml mount from here and rely on git clone in DAG or Operator.
     - airflow-ml-data:/opt/airflow/ml
@@ -48,6 +48,31 @@ services:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 10
+    restart: always
+
+  db-backup:
+    build:
+      context: ./infra/docker-scripts
+      dockerfile: Dockerfile.backup
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+      - MLFLOW_S3_ENDPOINT_URL=${MLFLOW_S3_ENDPOINT_URL}
+      - MLFLOW_S3_BUCKET=${MLFLOW_S3_BUCKET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+      - BACKUP_INTERVAL_SECONDS=3600
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["restore_and_loop"]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/healthy"]
       interval: 5s
       retries: 5
 
@@ -57,28 +82,37 @@ services:
       - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 30s
       retries: 50
 
   mlflow:
     build:
-      context: ./airflow
+      context: ./infra/airflow
       dockerfile: Dockerfile.ml
+    entrypoint: ["/bin/bash", "-c"]
     command: >
-      mlflow server
+      "mlflow server
       --backend-store-uri postgresql://airflow:airflow@postgres:5432/mlflow_db
       --default-artifact-root s3://${MLFLOW_S3_BUCKET}/ml-artifacts
       --host 0.0.0.0
       --port 5000
+      --workers 4
+      --allowed-hosts '*'
+      "
+
+
     ports:
-      - "5000:5000"
+      - "5001:5000"
     environment:
+      - MLFLOW_ALLOW_INSECURE_HOSTS=*
       - MLFLOW_S3_ENDPOINT_URL=${MLFLOW_S3_ENDPOINT_URL}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+
     depends_on:
       - postgres
+    restart: always
 
   airflow-webserver:
     <<: *airflow-common
@@ -88,26 +122,46 @@ services:
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 30s
       retries: 5
     restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
 
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
     restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
 
   airflow-worker:
     <<: *airflow-common
-    command: celery worker
+    command: celery worker --celery-hostname=celery@%h
+    # Explicit hostname to fix Celery crash "AttributeError: 'NoneType' object has no attribute 'split'"
+    hostname: airflow-worker
     # GPU Configuration (Optional - will be ignored on CPU hosts if not available or just managed by driver)
     # Removing 'deploy' block to ensure compatibility with CPU-only environments in Yandex Cloud.
     # If GPU is needed, Docker engine must be configured with nvidia-runtime default.
     restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
 
   airflow-init:
     <<: *airflow-common
     command: version
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mlflow:
+        condition: service_started
+      db-backup:
+        condition: service_healthy
     environment:
       <<: *airflow-environment
       _AIRFLOW_DB_UPGRADE: 'true'

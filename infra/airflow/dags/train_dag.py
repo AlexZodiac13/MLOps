@@ -31,15 +31,31 @@ with DAG(
         task_id='setup_codebase',
         bash_command=f"""
         echo "Setting up repository at {REPO_DIR}..."
-        GIT_URL=${{GIT_REPO_URL:-"https://github.com/your-default/repo.git"}}
-        BRANCH=${{GIT_BRANCH:-"main"}}
+        # Используем переменные окружения, переданные в Airflow
+        # Если переменная не задана, упадем с ошибкой, чтобы не клонировать дефолтный репо
+        GIT_URL=$GIT_REPO_URL
+        BRANCH=$GIT_BRANCH
+        
+        if [ -z "$GIT_URL" ]; then
+            echo "ERROR: GIT_REPO_URL environment variable is not set"
+            exit 1
+        fi
+
+        if [ -z "$BRANCH" ]; then
+            echo "WARNING: GIT_BRANCH is not set, defaulting to 'main'"
+            BRANCH="main"
+        fi
         
         if [ ! -d "{REPO_DIR}/.git" ]; then
-            echo "Cloning $GIT_URL..."
+            echo "Cloning $GIT_URL (branch: $BRANCH)..."
             git clone -b $BRANCH $GIT_URL {REPO_DIR}
         else
-            echo "Pulling latest changes..."
-            cd {REPO_DIR} && git pull origin $BRANCH
+            echo "Updating repository..."
+            cd {REPO_DIR}
+            git fetch origin
+            git reset --hard origin/$BRANCH
+            git checkout $BRANCH
+            git pull origin $BRANCH
         fi
         """
     )
