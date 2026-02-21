@@ -9,6 +9,8 @@ ml/results
 infra/.tmp_repo
 infra/.tmp_upload
 infra/variables.json
+infra/airflow/logs/*
+infra/airflow/plugins/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
