@@ -33,10 +33,16 @@ with DAG(
     tags=['llm', 'training', 'cpu', 'gguf'],
 ) as dag:
 
-    # 1. Clone/Pull Code
+    # 1. Clone/Pull Code (Conditioned)
     t1_setup_code = BashOperator(
         task_id='setup_codebase',
         bash_command=f"""
+        # If we are in dev mode (REPO_DIR mounted), skip git clone entirely
+        if [[ "{REPO_DIR}" == "/opt/airflow/ml_code" ]]; then
+            echo "Dev Mode: Using local code at {REPO_DIR}. Skipping git clone."
+            exit 0
+        fi
+
         echo "Setting up repository at {REPO_DIR}..."
         # Используем переменные окружения, переданные в Airflow
         # Если переменная не задана, упадем с ошибкой, чтобы не клонировать дефолтный репо
