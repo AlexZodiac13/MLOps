@@ -71,6 +71,9 @@ def train(data_path, model_id, output_dir, epochs=1):
         }
         if quantization_config:
             model_kwargs["quantization_config"] = quantization_config
+        
+        # Explicitly force torch_dtype to float16 to prevent model from loading in bfloat16
+        model_kwargs["torch_dtype"] = torch.float16
             
         model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
         
