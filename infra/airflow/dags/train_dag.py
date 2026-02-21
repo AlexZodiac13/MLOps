@@ -73,6 +73,10 @@ with DAG(
         """
     )
     
+    # Create environment with AWS credentials
+    env_vars = os.environ.copy()
+    env_vars['PYTHONUNBUFFERED'] = '1'
+    
     # 2. Train (CPU Compatible)
     t2_train = BashOperator(
         task_id='train_model',
@@ -92,9 +96,7 @@ with DAG(
           --epochs 1 \\
           --model_id "{MODEL_ID}"
         """,
-        env={
-            'PYTHONUNBUFFERED': '1'
-        },
+        env=env_vars,
         execution_timeout=timedelta(hours=12) # CPU training is slow
     )
 
@@ -108,9 +110,7 @@ with DAG(
           --adapter_path {ML_HOME}/results/final_adapter \
           --test_data {REPO_DIR}/ml/labeled_dataset.json
         """,
-        env={
-            'PYTHONUNBUFFERED': '1'
-        }
+        env=env_vars
     )
 
     # 4. Export to GGUF
@@ -123,9 +123,7 @@ with DAG(
           --adapter_path {ML_HOME}/results/final_adapter \
           --output_dir {ML_HOME}/results
         """,
-        env={
-            'PYTHONUNBUFFERED': '1'
-        },
+        env=env_vars,
         execution_timeout=timedelta(hours=2)
     )
 
@@ -136,9 +134,7 @@ with DAG(
         cd {REPO_DIR}/ml && \
         python3 compare_script.py
         """,
-        env={
-            'PYTHONUNBUFFERED': '1'
-        }
+        env=env_vars
     )
 
     t1_setup_code >> t2_train >> t3_test >> t4_export >> t5_compare
