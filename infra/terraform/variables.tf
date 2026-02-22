@@ -17,7 +17,6 @@ variable "zone" {
 
 variable "minio_access_key" { type = string }
 variable "minio_secret_key" { type = string }
-variable "bucket_name" { type = string }
 
 variable "public_key" {
   type        = string
