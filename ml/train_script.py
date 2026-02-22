@@ -54,7 +54,7 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
 
         # 2. Config & Tokenizer
         device_map = "auto"
-        quantization_config = None
+        model_kwargs = {}
 
         if torch.cuda.is_available():
             print("GPU detected. Using 4-bit quantization (QLoRA).")
@@ -81,7 +81,7 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
         # 3. Load Model
         # For CPU: no quantization config, just load model
         model_kwargs["trust_remote_code"] = True
-            
+        
         model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
         
         # Prepare for kbit training only if quantized
