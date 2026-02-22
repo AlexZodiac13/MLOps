@@ -5,7 +5,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import mlflow
 
-def test_model(model_id, adapter_path, test_data_path):
+def test_model(model_id, adapter_path, test_data_path, run_id_file="last_run_id.txt"):
     print(f"Loading model for testing: {model_id} + {adapter_path}")
     
     # Load model
@@ -63,11 +63,11 @@ def test_model(model_id, adapter_path, test_data_path):
     # Try to load existing run_id
     run_id = None
     try:
-        with open("last_run_id.txt", "r") as f:
+        with open(run_id_file, "r") as f:
             run_id = f.read().strip()
             print(f"Resuming MLflow Run: {run_id}")
     except FileNotFoundError:
-        print("No last_run_id.txt found, starting new run.")
+        print(f"No {run_id_file} found, starting new run.")
 
     with mlflow.start_run(run_id=run_id):
         mlflow.log_text(response, "test_sample_output.txt")
@@ -85,6 +85,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-3B-Instruct")
     parser.add_argument("--adapter_path", type=str, required=True)
     parser.add_argument("--test_data", type=str, required=True)
+    parser.add_argument("--run_id_file", type=str, default="last_run_id.txt")
     args = parser.parse_args()
     
-    test_model(args.model_id, args.adapter_path, args.test_data)
+    test_model(args.model_id, args.adapter_path, args.test_data, args.run_id_file)

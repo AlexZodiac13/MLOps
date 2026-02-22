@@ -94,7 +94,8 @@ with DAG(
           --data_path {REPO_DIR}/labeled_dataset.json \\
           --output_dir {ML_HOME}/results \\
           --epochs 1 \\
-          --model_id "{MODEL_ID}"
+          --model_id "{MODEL_ID}" \\
+          --run_id_file {ML_HOME}/last_run_id.txt
         """,
         env=env_vars,
         execution_timeout=timedelta(hours=12) # CPU training is slow
@@ -114,7 +115,8 @@ with DAG(
         python3 test_script.py \\
           --model_id "{MODEL_ID}" \\
           --adapter_path {ML_HOME}/results/final_adapter \\
-          --test_data labeled_dataset.json
+          --test_data labeled_dataset.json \\
+          --run_id_file {ML_HOME}/last_run_id.txt
         """,
         env=env_vars
     )
@@ -133,7 +135,8 @@ with DAG(
         python3 export_gguf.py \\
           --model_id "{MODEL_ID}" \\
           --adapter_path {ML_HOME}/results/final_adapter \\
-          --output_dir {ML_HOME}/results
+          --output_dir {ML_HOME}/results \\
+          --run_id_file {ML_HOME}/last_run_id.txt
         """,
         env=env_vars,
         execution_timeout=timedelta(hours=2)
@@ -150,7 +153,8 @@ with DAG(
             cd {REPO_DIR}/ml
         fi
 
-        python3 compare_script.py
+        python3 compare_script.py \\
+          --run_id_file {ML_HOME}/last_run_id.txt
         """,
         env=env_vars
     )

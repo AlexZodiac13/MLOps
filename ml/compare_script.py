@@ -2,7 +2,7 @@ import argparse
 import mlflow
 from mlflow.tracking import MlflowClient
 
-def compare_and_register(model_name="reminder-bot", metric="test_json_valid"):
+def compare_and_register(model_name="reminder-bot", metric="test_json_valid", run_id_file="last_run_id.txt"):
     mlflow.set_tracking_uri("http://mlflow:5000")
     client = MlflowClient()
     
@@ -25,10 +25,10 @@ def compare_and_register(model_name="reminder-bot", metric="test_json_valid"):
     metric_val = best_run.data.metrics.get(metric)
     print(f"Best run found: {best_run.info.run_id} with {metric}: {metric_val}")
     
-    # Check if the current run (from last_run_id.txt) matches the best run
+    # Check if the current run (from run_id_file) matches the best run
     current_run_id = None
     try:
-        with open("last_run_id.txt", "r") as f:
+        with open(run_id_file, "r") as f:
             current_run_id = f.read().strip()
     except FileNotFoundError:
         pass
@@ -65,4 +65,10 @@ def compare_and_register(model_name="reminder-bot", metric="test_json_valid"):
         print(f"Registration failed (might already exist or artifact missing): {e}")
 
 if __name__ == "__main__":
-    compare_and_register()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_name", type=str, default="reminder-bot")
+    parser.add_argument("--metric", type=str, default="test_json_valid")
+    parser.add_argument("--run_id_file", type=str, default="last_run_id.txt")
+    args = parser.parse_args()
+    
+    compare_and_register(args.model_name, args.metric, args.run_id_file)

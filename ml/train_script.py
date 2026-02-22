@@ -27,7 +27,7 @@ def format_instruction(sample):
     ]
     return {"messages": messages}
 
-def train(data_path, model_id, output_dir, epochs=1):
+def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.txt"):
     print(f"Starting training with model {model_id}")
     mlflow.set_tracking_uri("http://mlflow:5000")
     mlflow.set_experiment("reminder-bot-experiment")
@@ -37,8 +37,12 @@ def train(data_path, model_id, output_dir, epochs=1):
         print(f"MLflow Run ID: {run_id}")
         
         # Save run_id for subsequent steps
-        with open("last_run_id.txt", "w") as f:
-            f.write(run_id)
+        try:
+            with open(run_id_file, "w") as f:
+                f.write(run_id)
+            print(f"Saved run_id to {run_id_file}")
+        except Exception as e:
+            print(f"Warning: Could not save run_id to {run_id_file}: {e}")
             
         mlflow.log_param("model_id", model_id)
         mlflow.log_param("epochs", epochs)
@@ -172,6 +176,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-3B-Instruct")
     parser.add_argument("--output_dir", type=str, default="./results")
     parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--run_id_file", type=str, default="last_run_id.txt")
     args = parser.parse_args()
     
-    train(args.data_path, args.model_id, args.output_dir, args.epochs)
+    train(args.data_path, args.model_id, args.output_dir, args.epochs, args.run_id_file)

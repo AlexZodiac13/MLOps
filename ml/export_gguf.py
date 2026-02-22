@@ -6,7 +6,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import subprocess
 import mlflow
 
-def merge_and_export(model_id, adapter_path, output_dir, quantize_type="q4_k_m"):
+def merge_and_export(model_id, adapter_path, output_dir, quantize_type="q4_k_m", run_id_file="last_run_id.txt"):
     print(f"Loading base model: {model_id}")
     print(f"Loading adapter: {adapter_path}")
     
@@ -77,11 +77,11 @@ def merge_and_export(model_id, adapter_path, output_dir, quantize_type="q4_k_m")
     # Try to load existing run_id
     run_id = None
     try:
-        with open("last_run_id.txt", "r") as f:
+        with open(run_id_file, "r") as f:
             run_id = f.read().strip()
             print(f"Resuming MLflow Run: {run_id}")
     except FileNotFoundError:
-        print("No last_run_id.txt found, creating new run.")
+        print(f"No {run_id_file} found, creating new run.")
 
     # We can attach to the existing run if we pass run_id, or just log directly
     with mlflow.start_run(run_id=run_id):
@@ -94,6 +94,7 @@ if __name__ == "__main__":
     # Adapter path is passed from the previous step output
     parser.add_argument("--adapter_path", type=str, required=True)
     parser.add_argument("--output_dir", type=str, default="./results")
+    parser.add_argument("--run_id_file", type=str, default="last_run_id.txt")
     args = parser.parse_args()
     
-    merge_and_export(args.model_id, args.adapter_path, args.output_dir)
+    merge_and_export(args.model_id, args.adapter_path, args.output_dir, run_id_file=args.run_id_file)
