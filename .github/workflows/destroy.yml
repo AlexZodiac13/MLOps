@@ -5,12 +5,12 @@ on:
 
 env:
   TF_ROOT: infra/terraform
-  yc_token: ${{ secrets.YC_TOKEN }}
-  cloud_id: ${{ secrets.CLOUD_ID }}
-  folder_id: ${{ secrets.FOLDER_ID }}
-  zone: ${{ secrets.ZONE }}
-  public_key: ${{ secrets.PUBLIC_KEY }}
-  private_key: ${{ secrets.PRIVATE_KEY }}
+  TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
+  TF_VAR_cloud_id: ${{ secrets.CLOUD_ID }}
+  TF_VAR_folder_id: ${{ secrets.FOLDER_ID }}
+  TF_VAR_zone: ${{ secrets.ZONE }}
+  TF_VAR_public_key: ${{ secrets.PUBLIC_KEY }}
+  TF_VAR_private_key: ${{ secrets.PRIVATE_KEY }}
   minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
   minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
   
