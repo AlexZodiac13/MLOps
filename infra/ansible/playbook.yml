@@ -1,0 +1,101 @@
+---
+- name: Настройка ML хоста (CPU) с Docker
+  hosts: ml_host
+  become: true
+  vars:
+    project_dir: "/home/zodiac/MLOps"
+  
+  tasks:
+    # --- 1. Обновление системы и установка зависимостей ---
+    - name: Обновление кэша apt
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Установка базовых зависимостей
+      apt:
+        name:
+          - curl
+          - git
+          - rsync
+          - build-essential
+          - unzip
+          - python3-pip
+          - python3-setuptools
+        state: present
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    # --- 2. Установка Docker ---
+    - name: Проверка установленной версии Docker
+      command: docker --version
+      register: docker_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Установка Docker через официальный скрипт (если не установлен)
+      block:
+        - name: Скачивание скрипта установки Docker
+          get_url:
+            url: https://get.docker.com
+            dest: /tmp/install_docker.sh
+            mode: '0755'
+        
+        - name: Запуск скрипта установки Docker
+          command: /tmp/install_docker.sh
+      when: docker_check.rc != 0
+
+    - name: Добавление пользователя в группу docker
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    # --- 3. Настройка проекта ---
+    - name: Создание директории проекта
+      file:
+        path: "{{ project_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Клонирование репозитория
+      git:
+        repo: "https://github.com/AlexZodiac13/MLOps.git"
+        dest: "{{ project_dir }}"
+        version: "project-work" # Ветка, в которой ведется работа
+        force: yes
+
+    - name: Копирование файла окружения .env
+      copy:
+        src: "../../.env"
+        dest: "{{ project_dir }}/.env"
+        owner: "{{ ansible_user }}"
+        mode: '0600'
+      ignore_errors: yes
+
+    # --- 4. Запуск приложения ---
+    - name: Убедимся что плагин docker compose установлен (для модуля)
+      apt:
+        name: docker-compose-plugin
+        state: present
+
+    - name: Запуск сервисов через Docker Compose
+      # Используем shell, так как community.docker.docker_compose_v2 требует python библиотек, которых может не быть 
+      # "docker compose up -d --build" надежнее в простом скрипте
+      shell: docker compose up -d --build > /home/{{ ansible_user }}/docker_build.log 2>&1
+      args:
+        chdir: "{{ project_dir }}"
+      environment:
+        # Передаем переменные явно, либо полагаемся на .env файл
+        # Убрана переменная COMPOSE_FILE, docker сам найдет docker-compose.yml
+        COMPOSE_FILE: "docker-compose.yml"
+      async: 3600
+      poll: 30
+
+  handlers:
+    - name: Перезапуск Docker
+      service:
+        name: docker
+        state: restarted

@@ -1,8 +1,8 @@
 bot/config/config.ini
 infra/terraform/terraform.tfvars
 ml/user_messages.csv
-infra/.terraform/
-infra/.terraform.lock.hcl
+infra/terraform/.terraform*
+infra/terraform/.terraform.lock.hcl
 ml/llama.cpp
 ml/qwen2.5*
 ml/results

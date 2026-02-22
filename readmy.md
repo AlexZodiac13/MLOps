@@ -11,3 +11,10 @@ docker-compose run --rm airflow-init
 
 Airflow: http://localhost:8080 (логин/пароль: airflow/airflow)
 MLflow: http://localhost:5000
+
+
+
+# Terraform local
+
+terraform -chdir=infra/terraform init -reconfigure -backend-config="access_key=user" -backend-config="secret_key=password"
+terraform -chdir=infra/terraform apply -auto-approve
