@@ -19,7 +19,7 @@ env:
   private_key: ${{ secrets.PRIVATE_KEY }}
   minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
   minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
-  bucket_name: ${{ secrets.BUCKET_NAME }}
+  bucket_name: ${{ vars.BUCKET_NAME }}
 
 jobs:
   terraform:
