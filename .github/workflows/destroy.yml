@@ -4,24 +4,15 @@ on:
   workflow_dispatch:  # Только ручной запуск по кнопке
 
 env:
-  TF_ROOT: infra
+  TF_ROOT: infra/terraform
   YC_TOKEN: ${{ secrets.YC_TOKEN }}
-  YC_CLOUD_ID: ${{ secrets.CLOUD_ID }}
-  YC_FOLDER_ID: ${{ secrets.FOLDER_ID }}
-  TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
-  TF_VAR_cloud_id: ${{ secrets.CLOUD_ID }}
-  TF_VAR_folder_id: ${{ secrets.FOLDER_ID }}
-  TF_VAR_admin_password: ${{ secrets.ADMIN_PASSWORD }}
-  TF_VAR_bucket_name: ${{ secrets.BUCKET_NAME }}
-  TF_VAR_cluster_name: ${{ secrets.CLUSTER_NAME }}
-  TF_VAR_zone: ${{ secrets.ZONE }}
-  TF_VAR_create_network: ${{ secrets.CREATE_NETWORK }}
-  TF_VAR_network_id: ${{ secrets.NETWORK_ID }}
-  TF_VAR_aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  TF_VAR_aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  TF_VAR_minio_endpoint_url: ${{ secrets.MINIO_ENDPOINT_URL }}
-  TF_VAR_minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
-  TF_VAR_minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
+  CLOUD_ID: ${{ secrets.CLOUD_ID }}
+  FOLDER_ID: ${{ secrets.FOLDER_ID }}
+  zone: ${{ secrets.ZONE }}
+  public_key: ${{ secrets.PUBLIC_KEY }}
+  private_key: ${{ secrets.PRIVATE_KEY }}
+  minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
+  minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
   
 
 jobs:
