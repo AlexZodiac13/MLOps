@@ -17,8 +17,8 @@ env:
   TF_VAR_zone: ${{ secrets.ZONE }}
   TF_VAR_public_key: ${{ secrets.PUBLIC_KEY }}
   TF_VAR_private_key: ${{ secrets.PRIVATE_KEY }}
-  minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
-  minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
+  TF_VAR_minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
+  TF_VAR_minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
 
 jobs:
   terraform:
@@ -41,8 +41,8 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           cat <<EOF > backend.conf
-          access_key                  = "${{ secrets.minio_access_key }}"
-          secret_key                  = "${{ secrets.minio_secret_key }}"
+          access_key                  = "${{ secrets.MINIO_ACCESS_KEY }}"
+          secret_key                  = "${{ secrets.MINIO_SECRET_KEY }}"
           skip_credentials_validation = true
           skip_metadata_api_check     = true
           skip_region_validation      = true
