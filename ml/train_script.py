@@ -64,33 +64,29 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
                 bnb_4bit_compute_dtype=torch.float16, 
                 bnb_4bit_use_double_quant=True,
             )
-            quantization_config = bnb_config
+            model_kwargs["quantization_config"] = bnb_config
+            model_kwargs["device_map"] = "auto"
+            model_kwargs["torch_dtype"] = torch.float16
         else:
-            print("No GPU detected. Using CPU execution (Standard LoRA).")
+            print("No GPU detected. Using CPU execution (Standard LoRA) with Float32.")
             device_map = {"": "cpu"}
-            # On CPU, we don't quantize with bitsandbytes (requires CUDA)
-            # We load in float32 or float16 if supported, but float32 is safest for CPU training stability
-            
+            # On CPU, bitsandbytes 4-bit/8-bit usually requires CUDA.
+            # We must use float32 for stable training on CPU (Linear layers crash with Half/Float mismatch)
+            model_kwargs["device_map"] = device_map
+            model_kwargs["torch_dtype"] = torch.float32
+
         tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
         tokenizer.pad_token = tokenizer.eos_token
 
         # 3. Load Model
         # For CPU: no quantization config, just load model
-        model_kwargs = {
-            "device_map": device_map,
-            "trust_remote_code": True
-        }
-        if quantization_config:
-            model_kwargs["quantization_config"] = quantization_config
-        
-        # Explicitly force torch_dtype to float16 to prevent model from loading in bfloat16
-        model_kwargs["torch_dtype"] = torch.float16
+        model_kwargs["trust_remote_code"] = True
             
         model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
         
         # Prepare for kbit training only if quantized
         model.config.use_cache = False
-        if quantization_config:
+        if torch.cuda.is_available():
             model.gradient_checkpointing_enable()
             model = prepare_model_for_kbit_training(model)
         else:
