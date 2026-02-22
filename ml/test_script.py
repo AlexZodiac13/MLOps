@@ -59,7 +59,17 @@ def test_model(model_id, adapter_path, test_data_path):
     # Log metric to MLflow
     mlflow.set_tracking_uri("http://mlflow:5000")
     mlflow.set_experiment("reminder-bot-experiment")
-    with mlflow.start_run():
+    
+    # Try to load existing run_id
+    run_id = None
+    try:
+        with open("last_run_id.txt", "r") as f:
+            run_id = f.read().strip()
+            print(f"Resuming MLflow Run: {run_id}")
+    except FileNotFoundError:
+        print("No last_run_id.txt found, starting new run.")
+
+    with mlflow.start_run(run_id=run_id):
         mlflow.log_text(response, "test_sample_output.txt")
         # Simple validation: is it valid JSON?
         try:

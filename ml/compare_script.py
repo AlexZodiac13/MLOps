@@ -22,11 +22,27 @@ def compare_and_register(model_name="reminder-bot", metric="test_json_valid"):
         return
 
     best_run = runs[0]
-    print(f"Best run: {best_run.info.run_id} with {metric}: {best_run.data.metrics.get(metric)}")
+    metric_val = best_run.data.metrics.get(metric)
+    print(f"Best run found: {best_run.info.run_id} with {metric}: {metric_val}")
     
-    # Check if we should register this model version
-    # (Simplified logic: if it's the best so far)
+    # Check if the current run (from last_run_id.txt) matches the best run
+    current_run_id = None
+    try:
+        with open("last_run_id.txt", "r") as f:
+            current_run_id = f.read().strip()
+    except FileNotFoundError:
+        pass
+
+    if current_run_id:
+        print(f"Current Pipeline Run ID: {current_run_id}")
+        if best_run.info.run_id == current_run_id:
+            print("Great! The current run is the best performing model so far.")
+        else:
+            print(f"Current run is NOT the best. Best is {best_run.info.run_id}")
     
+    # Register the BEST model found (not necessarily the current one)
+    # The artifact path must match where export_gguf.py saved it
+    # export_gguf.py uses artifact_path="gguf", so the model is inside that folder
     model_uri = f"runs:/{best_run.info.run_id}/gguf"
     
     try:

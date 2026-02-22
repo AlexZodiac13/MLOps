@@ -32,7 +32,14 @@ def train(data_path, model_id, output_dir, epochs=1):
     mlflow.set_tracking_uri("http://mlflow:5000")
     mlflow.set_experiment("reminder-bot-experiment")
     
-    with mlflow.start_run():
+    with mlflow.start_run() as run:
+        run_id = run.info.run_id
+        print(f"MLflow Run ID: {run_id}")
+        
+        # Save run_id for subsequent steps
+        with open("last_run_id.txt", "w") as f:
+            f.write(run_id)
+            
         mlflow.log_param("model_id", model_id)
         mlflow.log_param("epochs", epochs)
 
@@ -123,7 +130,7 @@ def train(data_path, model_id, output_dir, epochs=1):
             logging_steps=10,
             save_strategy="epoch",
             optim="adamw_torch", # standard adamw works everywhere
-            report_to="none",
+            report_to="mlflow",  # Changed from "none" to "mlflow" to enable logging
             max_length=512,
             dataset_text_field="text",
             packing=False

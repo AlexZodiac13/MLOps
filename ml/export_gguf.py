@@ -74,9 +74,17 @@ def merge_and_export(model_id, adapter_path, output_dir, quantize_type="q4_k_m")
     mlflow.set_tracking_uri("http://mlflow:5000")
     mlflow.set_experiment("reminder-bot-experiment")
     
+    # Try to load existing run_id
+    run_id = None
+    try:
+        with open("last_run_id.txt", "r") as f:
+            run_id = f.read().strip()
+            print(f"Resuming MLflow Run: {run_id}")
+    except FileNotFoundError:
+        print("No last_run_id.txt found, creating new run.")
+
     # We can attach to the existing run if we pass run_id, or just log directly
-    # For simplicity, we just log artifact to default or new run
-    with mlflow.start_run():
+    with mlflow.start_run(run_id=run_id):
         mlflow.log_artifact(quantized_gguf_path, artifact_path="gguf")
         print(f"Artifact logged: {quantized_gguf_path}")
 

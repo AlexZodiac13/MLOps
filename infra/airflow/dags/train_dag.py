@@ -104,11 +104,17 @@ with DAG(
     t3_test = BashOperator(
         task_id='test_model',
         bash_command=f"""
-        cd {REPO_DIR}/ml && \
-        python3 test_script.py \
-          --model_id "{MODEL_ID}" \
-          --adapter_path {ML_HOME}/results/final_adapter \
-          --test_data {REPO_DIR}/ml/labeled_dataset.json
+        # Handle path differences between dev mount and prod repo structure
+        if [[ "{REPO_DIR}" == "/opt/airflow/ml_code" ]]; then
+            cd {REPO_DIR}
+        else
+            cd {REPO_DIR}/ml
+        fi
+        
+        python3 test_script.py \\
+          --model_id "{MODEL_ID}" \\
+          --adapter_path {ML_HOME}/results/final_adapter \\
+          --test_data labeled_dataset.json
         """,
         env=env_vars
     )
@@ -117,10 +123,16 @@ with DAG(
     t4_export = BashOperator(
         task_id='export_gguf',
         bash_command=f"""
-        cd {REPO_DIR}/ml && \
-        python3 export_gguf.py \
-          --model_id "{MODEL_ID}" \
-          --adapter_path {ML_HOME}/results/final_adapter \
+        # Handle path differences between dev mount and prod repo structure
+        if [[ "{REPO_DIR}" == "/opt/airflow/ml_code" ]]; then
+            cd {REPO_DIR}
+        else
+            cd {REPO_DIR}/ml
+        fi
+
+        python3 export_gguf.py \\
+          --model_id "{MODEL_ID}" \\
+          --adapter_path {ML_HOME}/results/final_adapter \\
           --output_dir {ML_HOME}/results
         """,
         env=env_vars,
@@ -131,7 +143,13 @@ with DAG(
     t5_compare = BashOperator(
         task_id='compare_and_register',
         bash_command=f"""
-        cd {REPO_DIR}/ml && \
+        # Handle path differences between dev mount and prod repo structure
+        if [[ "{REPO_DIR}" == "/opt/airflow/ml_code" ]]; then
+            cd {REPO_DIR}
+        else
+            cd {REPO_DIR}/ml
+        fi
+
         python3 compare_script.py
         """,
         env=env_vars
