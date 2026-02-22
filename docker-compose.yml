@@ -151,13 +151,13 @@ services:
     # Explicit hostname to fix Celery crash "AttributeError: 'NoneType' object has no attribute 'split'"
     hostname: airflow-worker
     # GPU Configuration
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
     restart: always
     depends_on:
       airflow-init:
