@@ -13,7 +13,6 @@ env:
   private_key: ${{ secrets.PRIVATE_KEY }}
   minio_access_key: ${{ secrets.MINIO_ACCESS_KEY }}
   minio_secret_key: ${{ secrets.MINIO_SECRET_KEY }}
-  bucket_name: ${{ secrets.BUCKET_NAME }}
   
 
 jobs:
@@ -38,6 +37,8 @@ jobs:
           cat <<EOF > backend.conf
           access_key                  = "${{ secrets.minio_access_key }}"
           secret_key                  = "${{ secrets.minio_secret_key }}"
+          cloud_id                    = "${{ secrets.CLOUD_ID }}"
+          folder_id                   = "${{ secrets.FOLDER_ID }}"
           skip_credentials_validation = true
           skip_metadata_api_check     = true
           skip_region_validation      = true
