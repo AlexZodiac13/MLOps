@@ -1,5 +1,6 @@
 
 x-airflow-common: &airflow-common
+  image: mlops-custom-airflow:latest
   build:
     context: ./infra/airflow
     dockerfile: Dockerfile.ml
@@ -88,6 +89,7 @@ services:
       retries: 50
 
   mlflow:
+    image: mlops-custom-airflow:latest
     build:
       context: ./infra/airflow
       dockerfile: Dockerfile.ml
