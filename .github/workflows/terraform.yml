@@ -41,8 +41,8 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           cat <<EOF > backend.conf
-          access_key                  = "${{ secrets.AWS_ACCESS_KEY_ID }}"
-          secret_key                  = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          access_key                  = "${{ secrets.minio_access_key }}"
+          secret_key                  = "${{ secrets.minio_secret_key }}"
           skip_credentials_validation = true
           skip_metadata_api_check     = true
           skip_region_validation      = true
