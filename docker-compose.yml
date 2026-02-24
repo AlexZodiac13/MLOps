@@ -1,9 +1,6 @@
 
 x-airflow-common: &airflow-common
   image: mlops-custom-airflow:latest
-  build:
-    context: ./infra/airflow
-    dockerfile: Dockerfile.ml
   environment: &airflow-environment
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
@@ -54,6 +51,13 @@ services:
       retries: 10
     restart: always
 
+  airflow-base:
+    build:
+      context: ./infra/airflow
+      dockerfile: Dockerfile.ml
+    image: mlops-custom-airflow:latest
+
+
   db-backup:
     build:
       context: ./infra/docker-scripts
@@ -91,9 +95,6 @@ services:
 
   mlflow:
     image: mlops-custom-airflow:latest
-    build:
-      context: ./infra/airflow
-      dockerfile: Dockerfile.ml
     entrypoint: ["/bin/bash", "-c"]
     command: >
       "mlflow server
@@ -121,6 +122,7 @@ services:
 
     depends_on:
       - postgres
+      - airflow-base
     restart: always
 
   airflow-webserver:
@@ -135,6 +137,8 @@ services:
       retries: 5
     restart: always
     depends_on:
+      airflow-base:
+        condition: service_started
       airflow-init:
         condition: service_completed_successfully
 
@@ -143,15 +147,16 @@ services:
     command: scheduler
     restart: always
     depends_on:
+      airflow-base:
+        condition: service_started
       airflow-init:
         condition: service_completed_successfully
 
   airflow-worker:
     <<: *airflow-common
     command: celery worker --celery-hostname=celery@%h
-    # Explicit hostname to fix Celery crash "AttributeError: 'NoneType' object has no attribute 'split'"
     hostname: airflow-worker
-    # GPU Configuration
+    # GPU Configuration (uncomment if needed and ensure proper NVIDIA Container Toolkit setup)
     # deploy:
     #   resources:
     #     reservations:
@@ -161,6 +166,8 @@ services:
     #           capabilities: [gpu]
     restart: always
     depends_on:
+      airflow-base:
+        condition: service_started
       airflow-init:
         condition: service_completed_successfully
 
@@ -168,6 +175,8 @@ services:
     <<: *airflow-common
     command: version
     depends_on:
+      airflow-base:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:

@@ -37,6 +37,11 @@ jobs:
         with:
           terraform_version: 1.7.0
 
+      - name: Restore .env from secret (base64)
+        run: |
+          echo "${{ secrets.DOTENV_B64 }}" | base64 --decode > .env
+          chmod 600 .env
+
       - name: Terraform Init
         working-directory: ${{ env.TF_ROOT }}
         run: |
@@ -58,6 +63,18 @@ jobs:
       - name: Terraform Plan
         working-directory: ${{ env.TF_ROOT }}
         run: terraform plan -out=tfplan
+
+      - name: Install Ansible and SSH client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip openssh-client
+          pip3 install ansible
+
+      - name: Setup SSH private key for Ansible
+        run: |
+          mkdir -p $HOME/.ssh
+          echo "${{ secrets.PRIVATE_KEY }}" > $HOME/.ssh/otus
+          chmod 600 $HOME/.ssh/otus
 
       - name: Terraform Apply
         if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/project-work') && github.event_name == 'workflow_dispatch'

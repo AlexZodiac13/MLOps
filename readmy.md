@@ -1,11 +1,8 @@
+# Очистить кэш сборщика перед сборкой
+docker builder prune --all --force
+
 # Сборка образа с ML библиотеками (займет время, компиляция llama.cpp)
 docker-compose up --build -d
-
-
-# Создание базы mlflow_db
-docker-compose exec postgres /bin/bash /opt/airflow/init_db.sh
-# Инициализация Airflow (если не сработал авто-инит)
-docker-compose run --rm airflow-init
 
 Доступ к интерфейсам:
 
@@ -18,3 +15,6 @@ MLflow: http://localhost:5000
 
 terraform -chdir=infra/terraform init -reconfigure -backend-config="access_key=user" -backend-config="secret_key=password"
 terraform -chdir=infra/terraform apply -auto-approve
+
+# GPU Configuration
+Коментирую и раскоментирую данный блок в docker compose, включаем и выключаем использование GPU в зависимости от его наличия
