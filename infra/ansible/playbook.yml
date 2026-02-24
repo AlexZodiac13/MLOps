@@ -4,6 +4,7 @@
   become: true
   vars:
     project_dir: "/home/zodiac/MLOps"
+    airflow_uid: 50000
   
   tasks:
     # --- 1. Обновление системы и установка зависимостей ---
@@ -66,6 +67,27 @@
         dest: "{{ project_dir }}"
         version: "project-work" # Ветка, в которой ведется работа
         force: yes
+
+    - name: Ensure airflow directories exist
+      file:
+        path: "{{ project_dir }}/infra/airflow/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - logs
+        - dags
+        - plugins
+
+    - name: Set ownership for airflow directories to Airflow UID
+      file:
+        path: "{{ project_dir }}/infra/airflow/{{ item }}"
+        owner: "{{ airflow_uid }}"
+        group: '0'
+        recurse: yes
+      loop:
+        - logs
+        - dags
+        - plugins
 
     - name: Копирование файла окружения .env
       copy:
