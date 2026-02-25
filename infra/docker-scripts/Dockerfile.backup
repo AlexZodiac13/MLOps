@@ -9,4 +9,4 @@ RUN apk add --no-cache \
 COPY pg_s3_sync.sh /usr/local/bin/pg_s3_sync.sh
 RUN chmod +x /usr/local/bin/pg_s3_sync.sh
 
-entrypoint ["/usr/local/bin/pg_s3_sync.sh"]
+ENTRYPOINT ["/usr/local/bin/pg_s3_sync.sh"]
