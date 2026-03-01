@@ -124,5 +124,5 @@ jobs:
         run: |
           ssh -p ${{ env.SERVER_SSH_PORT }} ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} "cd ${{ env.DEPLOY_DIR }} && \
             export DOCKER_USERNAME=${{ env.DOCKER_USERNAME }} && \
-            docker-compose pull && \
-            docker-compose up -d"
+            docker compose pull && \
+            docker compose up -d"
