@@ -1,0 +1,128 @@
+name: Build and Deploy Bot
+
+on:
+  push:
+    branches:
+      - main
+      - project-work
+    paths:
+      - 'deploy/**'
+      - '.github/workflows/deploy-bot.yml'
+  workflow_dispatch:
+
+env:
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+  # Названия репозиториев в Docker Hub
+  IMAGE_BOT_NAME: ${{ secrets.DOCKER_USERNAME }}/reminder-bot
+  IMAGE_MODEL_NAME: ${{ secrets.DOCKER_USERNAME }}/reminder-model
+  
+  # Данные сервера (нужно прописать их в secrets)
+  SERVER_IP: ${{ secrets.SERVER_IP }}
+  SERVER_USER: ${{ secrets.SERVER_USER }}
+  SERVER_SSH_PORT: ${{ secrets.SERVER_SSH_PORT }}
+  DEPLOY_DIR: /home/docker/reminder
+
+jobs:
+  build-and-push:
+    name: Build & Push Docker Images
+    runs-on: [self-hosted, MLOps-runner] 
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Extract metadata for bot
+        id: meta-bot
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_BOT_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ github.run_number }}
+
+      - name: Build and push bot image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./deploy/bot
+          push: true
+          tags: ${{ steps.meta-bot.outputs.tags }}
+          labels: ${{ steps.meta-bot.outputs.labels }}
+
+      - name: Extract metadata for model
+        id: meta-model
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_MODEL_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ github.run_number }}
+
+      - name: Build and push model image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./deploy/ml-model
+          push: true
+          tags: ${{ steps.meta-model.outputs.tags }}
+          labels: ${{ steps.meta-model.outputs.labels }}
+          build-args: |
+            MLFLOW_TRACKING_URI="https://mlflow.zodiac.netcraze.pro/mlflow/"
+            MLFLOW_EXPERIMENT_NAME="reminder-bot-experiment"
+            MLFLOW_MODEL_STAGE="Production"
+            S3_ENDPOINT_URL="https://s3.owgrant.su"
+            S3_BUCKET_NAME="otus"
+            S3_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }}
+            S3_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}
+            S3_REGION="us-east-1"
+            MODEL_PATH="/app/model/"
+
+  deploy:
+    name: Deploy to Server
+    needs: build-and-push
+    runs-on: [self-hosted, MLOps-runner] 
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.PRIVATE_KEY_SERVER }}
+          known_hosts: 'just-a-placeholder-so-we-dont-get-errors'
+          
+      - name: Adding Known Hosts
+        run: ssh-keyscan -p ${{ env.SERVER_SSH_PORT }} -H ${{ env.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: Restore .env from secret
+        run: |
+          echo "${{ secrets.BOTENV_B64 }}" | base64 --decode > ./deploy/.env
+          chmod 600 ./deploy/.env
+
+      - name: Transfer configuration to server
+        run: |
+          # Создаем базовую директорию для переноса
+          ssh -p ${{ env.SERVER_SSH_PORT }} ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} "mkdir -p ${{ env.DEPLOY_DIR }}/postgres/data"
+          
+          # Копируем docker-compose.yaml и .env (scp использует -P для порта)
+          scp -P ${{ env.SERVER_SSH_PORT }} ./deploy/docker-compose.yaml ${{ env.SERVER_USER }}@${{ env.SERVER_IP }}:${{ env.DEPLOY_DIR }}/docker-compose.yaml
+          scp -P ${{ env.SERVER_SSH_PORT }} ./deploy/.env ${{ env.SERVER_USER }}@${{ env.SERVER_IP }}:${{ env.DEPLOY_DIR }}/.env
+
+      - name: Start docker-compose on server
+        run: |
+          ssh -p ${{ env.SERVER_SSH_PORT }} ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} "cd ${{ env.DEPLOY_DIR }} && \
+            export DOCKER_USERNAME=${{ env.DOCKER_USERNAME }} && \
+            docker-compose pull && \
+            docker-compose up -d"
