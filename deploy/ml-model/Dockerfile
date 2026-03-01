@@ -1,5 +1,5 @@
 # Dockerfile для FastAPI приложения с загрузкой модели
-FROM python:3.10-slim
+FROM cr.yandex/mirror/python:3.10-slim
 
 # Установить системные зависимости
 RUN sed -i 's/deb.debian.org/mirror.yandex.ru/g' /etc/apt/sources.list.d/debian.sources || true && \
