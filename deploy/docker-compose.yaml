@@ -1,0 +1,89 @@
+
+version: "3.9"
+
+services:
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: reminder-bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      model:
+        condition: service_started
+    env_file: ./.env
+    # environment:
+    #   TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+    #   DB_DSN: "postgresql://reminder:KvaKvaZaba0091123@postgres-reminder:5432/reminderdb"
+    #   ML_API_URL: "http://reminder-model:8001/extract_reminder"
+    #   ADMIN_ID: 410461386
+    #   DEFAULT_TZ: UTC
+    networks:
+      - reminder
+
+  postgres:
+    image: postgres:16
+    container_name: postgres-reminder
+    restart: unless-stopped
+    env_file: ./.env
+    # environment:
+    #   POSTGRES_USER: reminder
+    #   POSTGRES_PASSWORD: KvaKvaZaba0091123
+    #   POSTGRES_DB: reminderdb
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+    networks:
+      - reminder
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reminder -d reminderdb || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  model:
+    build:
+      context: ./ml-model
+      dockerfile: Dockerfile
+      args:
+        MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
+        MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME}
+        MLFLOW_MODEL_STAGE: ${MLFLOW_MODEL_STAGE}
+        S3_ENDPOINT_URL: ${S3_ENDPOINT_URL}
+        S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+        S3_SECRET_KEY: ${S3_SECRET_KEY}
+        S3_REGION: ${S3_REGION}
+        MODEL_PATH: ${MODEL_PATH}
+    container_name: reminder-model
+    restart: unless-stopped
+    networks:
+      - reminder
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: ./.env
+    # environment:
+    #   MLFLOW_TRACKING_URI: "http://mlflow:5000"
+    #   MLFLOW_EXPERIMENT_NAME: "reminder_parser"
+    #   MLFLOW_MODEL_STAGE: "Production"
+    #   S3_ENDPOINT_URL: "http://minio:9000"
+    #   S3_ACCESS_KEY: "minioadmin"
+    #   S3_SECRET_KEY: "minioadmin"
+    #   S3_REGION: "us-east-1"
+    #   MODEL_PATH: "/app/model/gguf"
+    # ports:
+    #   - "8001:8001"
+
+networks:
+  reminder:
+    driver: bridge
+
+
+# Структура 
+# /home/docker/reminder/
+#  ├── docker-compose.yml
+#  ├── postgres/
+#  │    └── data/        # данные Postgres
+#  └── ml-model/
+#       └── config/      # конфиг приложения

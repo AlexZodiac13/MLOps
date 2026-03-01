@@ -91,8 +91,8 @@
 
     - name: Копирование файла окружения .env
       copy:
-        src: "../../.env"
-        dest: "{{ project_dir }}/.env"
+        src: "infra/.env"
+        dest: "{{ project_dir }}/infra/.env"
         owner: "{{ ansible_user }}"
         mode: '0600'
       ignore_errors: yes
@@ -108,7 +108,7 @@
       # "docker compose up -d --build" надежнее в простом скрипте
       shell: docker compose up -d --build > /home/{{ ansible_user }}/docker_build.log 2>&1
       args:
-        chdir: "{{ project_dir }}"
+        chdir: "{{ project_dir }}/infra"
       environment:
         # Передаем переменные явно, либо полагаемся на .env файл
         # Убрана переменная COMPOSE_FILE, docker сам найдет docker-compose.yml

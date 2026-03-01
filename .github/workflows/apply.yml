@@ -39,8 +39,8 @@ jobs:
 
       - name: Restore .env from secret (base64)
         run: |
-          echo "${{ secrets.DOTENV_B64 }}" | base64 --decode > .env
-          chmod 600 .env
+          echo "${{ secrets.DOTENV_B64 }}" | base64 --decode > infra/.env
+          chmod 600 infra/.env
 
       - name: Terraform Init
         working-directory: ${{ env.TF_ROOT }}
