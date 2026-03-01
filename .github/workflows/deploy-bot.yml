@@ -21,7 +21,7 @@ env:
   SERVER_IP: ${{ secrets.SERVER_IP }}
   SERVER_USER: ${{ secrets.SERVER_USER }}
   SERVER_SSH_PORT: ${{ secrets.SERVER_SSH_PORT }}
-  DEPLOY_DIR: /home/docker/reminder
+  DEPLOY_DIR: /home/docker/reminder-mlops
 
 jobs:
   build-and-push:
