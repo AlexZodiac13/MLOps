@@ -12,7 +12,7 @@ RUN sed -i 's/deb.debian.org/mirror.yandex.ru/g' /etc/apt/sources.list.d/debian.
 
 
 COPY src/requirements.txt ./src/requirements.txt
-RUN pip install --no-cache-dir -r ./src/requirements.txt
+RUN pip install --no-cache-dir -r ./src/requirements.txt -i https://pypi.org/simple/ --extra-index-url https://mirrors.aliyun.com/pypi/simple/
 
 # COPY .env .env
 

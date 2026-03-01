@@ -13,7 +13,7 @@ WORKDIR /app
 
 # Копировать requirements.txt и установить зависимости
 COPY src/requirements.txt ./src/requirements.txt
-RUN pip install --upgrade pip && pip install -r ./src/requirements.txt
+RUN pip install --upgrade pip && pip install -r ./src/requirements.txt -i https://pypi.org/simple/ --extra-index-url https://mirrors.aliyun.com/pypi/simple/
 
 # Копировать исходный код
 COPY src/ ./src/
