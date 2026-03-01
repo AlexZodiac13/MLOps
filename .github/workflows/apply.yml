@@ -37,6 +37,11 @@ jobs:
         with:
           terraform_version: 1.7.0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
       - name: Restore .env from secret (base64)
         run: |
           echo "${{ secrets.DOTENV_B64 }}" | base64 --decode > infra/.env
