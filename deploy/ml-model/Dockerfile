@@ -2,7 +2,8 @@
 FROM python:3.10-slim
 
 # Установить системные зависимости
-RUN apt-get update && apt-get install -y \
+RUN sed -i 's/deb.debian.org/mirror.yandex.ru/g' /etc/apt/sources.list.d/debian.sources || true && \
+    apt-get update -o Acquire::Retries=3 && apt-get install -y \
     build-essential \
     libopenblas-dev \
     libgomp1 \

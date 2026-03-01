@@ -2,7 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && \
+RUN sed -i 's/deb.debian.org/mirror.yandex.ru/g' /etc/apt/sources.list.d/debian.sources || true && \
+    apt-get update -o Acquire::Retries=3 && \
     apt-get install -y --no-install-recommends \
         gcc \
         libpq-dev \
