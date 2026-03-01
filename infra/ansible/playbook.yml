@@ -91,7 +91,7 @@
 
     - name: Копирование файла окружения .env
       copy:
-        src: "infra/.env"
+        src: "{{ playbook_dir }}/../.env"
         dest: "{{ project_dir }}/infra/.env"
         owner: "{{ ansible_user }}"
         mode: '0600'
