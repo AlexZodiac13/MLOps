@@ -14,6 +14,7 @@ infra/airflow/plugins/*
 *.ini
 deploy/ml-model/model/*
 promt
+deploy/postgres/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -29,7 +29,7 @@ x-airflow-common: &airflow-common
     - ./airflow/logs:/opt/airflow/logs
     - ./airflow/plugins:/opt/airflow/plugins
     # Mount local ML code for development, overriding the cloned repo if needed
-    - ./ml:/opt/airflow/ml_code
+    - ../ml:/opt/airflow/ml_code
     - airflow-ml-data:/opt/airflow/ml
   depends_on:
     - postgres
@@ -204,6 +204,7 @@ services:
     depends_on:
       - airflow-webserver
       - mlflow
+      - db-backup
     restart: always
 
 volumes:
