@@ -160,13 +160,13 @@ services:
     command: celery worker --celery-hostname=celery@%h
     hostname: airflow-worker
     # GPU Configuration (uncomment if needed and ensure proper NVIDIA Container Toolkit setup)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: always
     depends_on:
       airflow-base:
