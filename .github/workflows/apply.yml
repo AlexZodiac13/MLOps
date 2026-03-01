@@ -23,7 +23,7 @@ env:
 jobs:
   terraform:
     name: "Terraform Apply"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, MLOps-runner]
     permissions:
       contents: read
       id-token: write
