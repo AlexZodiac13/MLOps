@@ -25,10 +25,11 @@ services:
     networks:
       - reminder
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U reminder -d reminderdb || exit 1"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U reminder"]
+      interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
 
   model:
     image: ${DOCKER_USERNAME}/reminder-model:latest
