@@ -25,7 +25,7 @@ services:
     networks:
       - reminder
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U reminder -d reminderdb"]
       interval: 10s
       timeout: 5s
       retries: 10
