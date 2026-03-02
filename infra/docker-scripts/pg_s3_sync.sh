@@ -82,33 +82,46 @@ restore_backup() {
     touch /tmp/healthy
 }
 
-backup_loop() {
+perform_backups() {
     IFS=',' read -r -a dbs <<< "$BACKUP_DBS"
+    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    for db in "${dbs[@]}"; do
+        db=$(echo "$db" | xargs)
+        BACKUP_FILE="${db}_${TIMESTAMP}.dump"
+        echo "Creating backup for DB $db: $BACKUP_FILE"
+        pg_dump -h "$PG_HOST" -U "$PG_USER" -F c -b -v -f "/tmp/$BACKUP_FILE" "$db" || true
+        echo "Uploading $BACKUP_FILE to s3://$S3_BUCKET/$BACKUP_PREFIX/"
+        aws $AWS_ARGS s3 cp "/tmp/$BACKUP_FILE" "s3://$S3_BUCKET/$BACKUP_PREFIX/$BACKUP_FILE" || true
+        rm -f "/tmp/$BACKUP_FILE"
+    done
+}
+
+backup_loop() {
     while true; do
         INTERVAL=${BACKUP_INTERVAL_SECONDS:-3600}
         echo "Sleeping for $INTERVAL seconds..."
         sleep $INTERVAL
 
-        TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-        for db in "${dbs[@]}"; do
-            db=$(echo "$db" | xargs)
-            BACKUP_FILE="${db}_${TIMESTAMP}.dump"
-            echo "Creating backup for DB $db: $BACKUP_FILE"
-            pg_dump -h "$PG_HOST" -U "$PG_USER" -F c -b -v -f "/tmp/$BACKUP_FILE" "$db" || true
-            echo "Uploading $BACKUP_FILE to s3://$S3_BUCKET/$BACKUP_PREFIX/"
-            aws $AWS_ARGS s3 cp "/tmp/$BACKUP_FILE" "s3://$S3_BUCKET/$BACKUP_PREFIX/$BACKUP_FILE" || true
-            rm -f "/tmp/$BACKUP_FILE"
-        done
+        perform_backups
 
         echo "Backup loop iteration completed."
     done
+}
+
+http_server() {
+    echo "Starting HTTP server on port 8080 for manual backups..."
+    # Launch socat in background so it doesn't block
+    socat TCP-LISTEN:8080,crlf,reuseaddr,fork SYSTEM:"echo HTTP/1.1 200 OK; echo Content-Type\: text/plain; echo; echo Manual backup initiated in background; nohup /usr/local/bin/pg_s3_sync.sh manual_backup >> /proc/1/fd/1 2>&1 </dev/null &" &
 }
 
 wait_for_postgres
 
 if [ "${1:-}" = "restore_and_loop" ]; then
     restore_backup
+    http_server
     backup_loop
+elif [ "${1:-}" = "manual_backup" ]; then
+    perform_backups
 else
     exec "$@"
 fi

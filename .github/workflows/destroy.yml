@@ -18,7 +18,7 @@ env:
 jobs:
   destroy:
     name: "Terraform Destroy"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, MLOps-runner]
     permissions:
       contents: read
 
@@ -30,6 +30,11 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
 
       - name: Terraform Init
         working-directory: ${{ env.TF_ROOT }}

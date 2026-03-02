@@ -4,7 +4,8 @@ RUN apk add --no-cache \
     postgresql-client \
     aws-cli \
     bash \
-    curl
+    curl \
+    socat
 
 COPY pg_s3_sync.sh /usr/local/bin/pg_s3_sync.sh
 RUN chmod +x /usr/local/bin/pg_s3_sync.sh

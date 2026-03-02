@@ -1,6 +1,9 @@
 import argparse
 import os
 import json
+import time
+import traceback
+import logging
 import torch
 import mlflow
 from datasets import load_dataset
@@ -28,36 +31,47 @@ def format_instruction(sample):
     return {"messages": messages}
 
 def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.txt"):
-    print(f"Starting training with model {model_id}")
+    # Setup logging for better diagnostics
+    logger = logging.getLogger("train_script")
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter("[%(asctime)s] %(levelname)s - %(message)s")
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+
+    logger.info("Starting training with model %s", model_id)
     mlflow.set_tracking_uri("http://mlflow:5000")
     mlflow.set_experiment("reminder-bot-experiment")
-    
+    start_time = time.time()
+
     with mlflow.start_run() as run:
         run_id = run.info.run_id
-        print(f"MLflow Run ID: {run_id}")
+        logger.info("MLflow Run ID: %s", run_id)
         
         # Save run_id for subsequent steps
         try:
             with open(run_id_file, "w") as f:
                 f.write(run_id)
-            print(f"Saved run_id to {run_id_file}")
+            logger.info("Saved run_id to %s", run_id_file)
         except Exception as e:
-            print(f"Warning: Could not save run_id to {run_id_file}: {e}")
+            logger.warning("Could not save run_id to %s: %s", run_id_file, e)
             
         mlflow.log_param("model_id", model_id)
         mlflow.log_param("epochs", epochs)
 
         # 1. Load Dataset
+        logger.debug("Loading dataset from %s", data_path)
         dataset = load_dataset("json", data_files=data_path, split="train")
         dataset = dataset.map(format_instruction)
-        print(f"Dataset loaded: {len(dataset)} samples")
+        logger.info("Dataset loaded: %d samples", len(dataset))
 
         # 2. Config & Tokenizer
         device_map = "auto"
         model_kwargs = {}
 
         if torch.cuda.is_available():
-            print("GPU detected. Using 4-bit quantization (QLoRA).")
+            logger.info("GPU detected. Using 4-bit quantization (QLoRA).")
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
@@ -75,14 +89,27 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
             model_kwargs["device_map"] = device_map
             model_kwargs["torch_dtype"] = torch.float32
 
+        logger.debug("Loading tokenizer for %s", model_id)
         tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
         tokenizer.pad_token = tokenizer.eos_token
+        logger.info("Tokenizer loaded. Pad token set.")
 
         # 3. Load Model
         # For CPU: no quantization config, just load model
         model_kwargs["trust_remote_code"] = True
         
-        model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
+        logger.debug("Loading model with kwargs: %s", {k: ('<redacted>' if k=='quantization_config' else str(v)) for k,v in model_kwargs.items()})
+        try:
+            model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
+            logger.info("Model loaded: %s", model_id)
+        except Exception as e:
+            logger.exception("Failed to load model %s: %s", model_id, e)
+            # Record in MLflow for debugging
+            try:
+                mlflow.log_param("model_load_error", str(e))
+            except Exception:
+                logger.debug("Failed to log model_load_error to MLflow")
+            raise
         
         # Prepare for kbit training only if quantized
         model.config.use_cache = False
@@ -94,15 +121,21 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
             model.enable_input_require_grads()
 
         # FORCE CAST ANY SUSPICIOUS MODULES TO FLOAT32/FLOAT16
-        print("Explicitly casting LayerNorms and checking for BFloat16...")
+        logger.debug("Explicitly casting LayerNorms and checking for BFloat16...")
         for name, module in model.named_modules():
             if "norm" in name.lower() or "ln" in name.lower():
-                module.to(torch.float32)
+                try:
+                    module.to(torch.float32)
+                except Exception:
+                    logger.debug("Could not cast module %s to float32", name)
             # Check params
             for p_name, p in module.named_parameters(recurse=False):
                 if p.dtype == torch.bfloat16:
-                    print(f"Found BFloat16 parameter: {name}.{p_name}. Casting to Float16.")
-                    p.data = p.data.to(torch.float16)
+                    logger.warning("Found BFloat16 parameter: %s.%s. Casting to Float16.", name, p_name)
+                    try:
+                        p.data = p.data.to(torch.float16)
+                    except Exception:
+                        logger.exception("Failed to cast parameter %s.%s", name, p_name)
 
         # 4. LoRA Config
         peft_config = LoraConfig(
@@ -146,6 +179,7 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
                     outputs.append("")
             return outputs
 
+        logger.info("Preparing trainer and PEFT configuration")
         trainer = SFTTrainer(
             model=model,
             train_dataset=dataset,
@@ -155,7 +189,33 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
             formatting_func=safe_formatting_func
         )
 
-        trainer.train()
+        # Run training with robust error handling and diagnostic dumps on failure
+        logger.info("Starting trainer.train()")
+        train_start = time.time()
+        try:
+            trainer.train()
+            train_dur = time.time() - train_start
+            logger.info("trainer.train() completed in %.2f sec", train_dur)
+        except Exception as e:
+            logger.exception("trainer.train() failed: %s", e)
+            # Write traceback to output_dir for offline inspection
+            try:
+                os.makedirs(output_dir, exist_ok=True)
+                tb_path = os.path.join(output_dir, "train_exception.log")
+                with open(tb_path, "w") as ef:
+                    ef.write(traceback.format_exc())
+                logger.info("Traceback written to %s", tb_path)
+                try:
+                    mlflow.log_artifact(tb_path, artifact_path="errors")
+                except Exception:
+                    logger.debug("Could not upload traceback to MLflow")
+                try:
+                    mlflow.log_param("train_error", str(e))
+                except Exception:
+                    logger.debug("Could not set MLflow param train_error")
+            except Exception:
+                logger.exception("Could not write traceback to disk")
+            raise
 
         # Save Adapters locally
         adapter_path = os.path.join(output_dir, "final_adapter")

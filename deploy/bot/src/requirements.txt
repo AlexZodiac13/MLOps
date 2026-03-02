@@ -1,0 +1,8 @@
+aiogram
+asyncpg
+aiohttp
+python-dateutil
+tzdata
+timezonefinder
+uvloop
+python-dotenv

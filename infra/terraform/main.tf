@@ -10,7 +10,7 @@ terraform {
 
   backend "s3" {
     endpoints = {
-      s3 = "https://s3.owgrant.su"
+      s3 = "https://home.owgrant.su:9005"
     }
     bucket = "otus"
     region = "us-east-1"

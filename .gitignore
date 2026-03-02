@@ -11,6 +11,10 @@ infra/.tmp_upload
 infra/variables.json
 infra/airflow/logs/*
 infra/airflow/plugins/*
+*.ini
+deploy/ml-model/model/*
+promt
+deploy/postgres/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
