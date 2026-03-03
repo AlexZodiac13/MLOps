@@ -1,0 +1,181 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: airflow-init
+  namespace: mlops
+spec:
+  template:
+    spec:
+      containers:
+      - command:
+        - version
+        env:
+        - name: _AIRFLOW_DB_UPGRADE
+          value: 'true'
+        - name: _AIRFLOW_WWW_USER_CREATE
+          value: 'true'
+        - name: _AIRFLOW_WWW_USER_USERNAME
+          value: airflow
+        - name: _AIRFLOW_WWW_USER_PASSWORD
+          value: airflow
+        envFrom:
+        - configMapRef:
+            name: infra-env
+        - secretRef:
+            name: infra-secrets
+        image: alexzodiac/mlops-airflow:latest
+        name: airflow-init
+        volumeMounts:
+        - mountPath: /opt/airflow/dags
+          name: airflow-dags
+        - mountPath: /opt/airflow/logs
+          name: airflow-logs
+        - mountPath: /opt/airflow/plugins
+          name: airflow-plugins
+      restartPolicy: Never
+      volumes:
+      - configMap:
+          name: airflow-dags-cm
+        name: airflow-dags
+      - emptyDir: {}
+        name: airflow-logs
+      - emptyDir: {}
+        name: airflow-plugins
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-webserver
+  namespace: mlops
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app: airflow-webserver
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-webserver
+  namespace: mlops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-webserver
+  template:
+    metadata:
+      labels:
+        app: airflow-webserver
+    spec:
+      containers:
+      - command:
+        - webserver
+        envFrom:
+        - configMapRef:
+            name: infra-env
+        - secretRef:
+            name: infra-secrets
+        image: alexzodiac/mlops-airflow:latest
+        name: webserver
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - mountPath: /opt/airflow/dags
+          name: airflow-dags
+        - mountPath: /opt/airflow/logs
+          name: airflow-logs
+        - mountPath: /opt/airflow/plugins
+          name: airflow-plugins
+      volumes:
+      - configMap:
+          name: airflow-dags-cm
+        name: airflow-dags
+      - emptyDir: {}
+        name: airflow-logs
+      - emptyDir: {}
+        name: airflow-plugins
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-scheduler
+  namespace: mlops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-scheduler
+  template:
+    metadata:
+      labels:
+        app: airflow-scheduler
+    spec:
+      containers:
+      - command:
+        - scheduler
+        envFrom:
+        - configMapRef:
+            name: infra-env
+        - secretRef:
+            name: infra-secrets
+        image: alexzodiac/mlops-airflow:latest
+        name: scheduler
+        volumeMounts:
+        - mountPath: /opt/airflow/dags
+          name: airflow-dags
+        - mountPath: /opt/airflow/logs
+          name: airflow-logs
+        - mountPath: /opt/airflow/plugins
+          name: airflow-plugins
+      volumes:
+      - configMap:
+          name: airflow-dags-cm
+        name: airflow-dags
+      - emptyDir: {}
+        name: airflow-logs
+      - emptyDir: {}
+        name: airflow-plugins
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-worker
+  namespace: mlops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-worker
+  template:
+    metadata:
+      labels:
+        app: airflow-worker
+    spec:
+      containers:
+      - command:
+        - celery
+        - worker
+        envFrom:
+        - configMapRef:
+            name: infra-env
+        - secretRef:
+            name: infra-secrets
+        image: alexzodiac/mlops-airflow:latest
+        name: worker
+        volumeMounts:
+        - mountPath: /opt/airflow/dags
+          name: airflow-dags
+        - mountPath: /opt/airflow/logs
+          name: airflow-logs
+        - mountPath: /opt/airflow/plugins
+          name: airflow-plugins
+      volumes:
+      - configMap:
+          name: airflow-dags-cm
+        name: airflow-dags
+      - emptyDir: {}
+        name: airflow-logs
+      - emptyDir: {}
+        name: airflow-plugins

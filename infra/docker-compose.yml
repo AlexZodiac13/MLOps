@@ -109,14 +109,7 @@ services:
       --serve-artifacts
       --allowed-hosts '*'
       "
-    # ports:
-    #   - "5001:5000"
     environment:
-      # Disable CSRF protection by overriding the Gunicorn application setting if possible
-      # But mostly we rely on --allowed-hosts '*' which we passed in command.
-      
-      # Ensure Gunicorn accepts requests from any proxy/host
-      # --forwarded-allow-ips='*' is critical behind Nginx
       - GUNICORN_CMD_ARGS=--bind=0.0.0.0:5000 --forwarded-allow-ips='*'
       
       - MLFLOW_S3_ENDPOINT_URL=${MLFLOW_S3_ENDPOINT_URL}
@@ -131,8 +124,6 @@ services:
   airflow-webserver:
     <<: *airflow-common
     command: webserver
-    # ports:
-    #   - "8080:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
@@ -209,8 +200,6 @@ services:
 
   loki:
     image: grafana/loki:latest
-    # ports:
-    #   - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
     restart: always
 
@@ -228,8 +217,6 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    # ports:
-    #   - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/grafana/

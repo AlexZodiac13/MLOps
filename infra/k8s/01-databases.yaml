@@ -1,0 +1,103 @@
+apiVersion: v1
+data:
+  01-create-mlflow.sh: "#!/bin/bash\nset -e\npsql -v ON_ERROR_STOP=1 --username \"\
+    $POSTGRES_USER\" <<-EOSQL\n  CREATE DATABASE mlflow_db;\nEOSQL\n"
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+  namespace: mlops
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: mlops
+spec:
+  ports:
+  - port: 5432
+  selector:
+    app: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: mlops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  serviceName: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - envFrom:
+        - secretRef:
+            name: infra-secrets
+        image: postgres:14
+        name: postgres
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-data
+        - mountPath: /docker-entrypoint-initdb.d/01-create-mlflow.sh
+          name: init-script
+          subPath: 01-create-mlflow.sh
+      volumes:
+      - configMap:
+          defaultMode: 493
+          name: postgres-init-script
+        name: init-script
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: mlops
+spec:
+  ports:
+  - port: 6379
+  selector:
+    app: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: mlops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - image: redis:latest
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        name: redis
+        ports:
+        - containerPort: 6379

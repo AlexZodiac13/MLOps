@@ -1,0 +1,52 @@
+apiVersion: v1
+data:
+  nginx.conf: "events {}\nhttp {\n  server {\n    listen 80;\n    location /airflow/\
+    \ {\n      proxy_pass http://airflow-webserver:8080/;\n      proxy_set_header\
+    \ Host $http_host;\n    }\n    location /mlflow/ {\n      proxy_pass http://mlflow:5000/;\n\
+    \      proxy_set_header Host $http_host;\n    }\n  }\n}\n"
+kind: ConfigMap
+metadata:
+  name: nginx-conf
+  namespace: mlops
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: mlops
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: nginx
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: mlops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx:latest
+        name: nginx
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /etc/nginx/nginx.conf
+          name: nginx-config
+          subPath: nginx.conf
+      volumes:
+      - configMap:
+          name: nginx-conf
+        name: nginx-config

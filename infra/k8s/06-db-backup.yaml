@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup
+  namespace: mlops
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - command:
+            - /bin/bash
+            - -c
+            - backup.sh
+            env:
+            - name: POSTGRES_HOST
+              value: postgres
+            - name: POSTGRES_USER
+              value: airflow
+            - name: POSTGRES_PASSWORD
+              value: airflow
+            - name: POSTGRES_DB
+              value: airflow
+            - name: FORCE_RESTORE
+              value: 'true'
+            envFrom:
+            - secretRef:
+                name: aws-s3-secret
+            image: alexzodiac/mlops-db-backup:latest
+            imagePullPolicy: Always
+            name: bkup
+          restartPolicy: OnFailure
+  schedule: 0 * * * *

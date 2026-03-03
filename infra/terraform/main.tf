@@ -32,86 +32,118 @@ provider "yandex" {
   zone      = var.zone
 }
 
-# VM Configuration
-
-# 1. Network (We need a network for the VM)
-resource "yandex_vpc_network" "vm_network" {
-  name = "gpu-vm-network"
+# 1. Network
+resource "yandex_vpc_network" "k8s_network" {
+  name = "k8s-network"
 }
 
-resource "yandex_vpc_subnet" "vm_subnet" {
-  name           = "gpu-vm-subnet-${var.zone}"
+resource "yandex_vpc_subnet" "k8s_subnet" {
+  name           = "k8s-subnet-${var.zone}"
   zone           = var.zone
-  network_id     = yandex_vpc_network.vm_network.id
+  network_id     = yandex_vpc_network.k8s_network.id
   v4_cidr_blocks = ["10.0.0.0/24"]
 }
 
-# 2. Disk Image (Debian 12 Bookworm) - Newer, stable repositories
-data "yandex_compute_image" "debian" {
-  family = "debian-12"
+# 2. Service Accounts for K8s
+resource "yandex_iam_service_account" "k8s_cluster_sa" {
+  name        = "k8s-cluster-sa"
+  description = "Service account for Kubernetes cluster"
 }
 
-# 3. CPU VM Instance (Preemptible, White IP, Standard v3)
-resource "yandex_compute_instance" "ml_vm" {
-  name        = "cpu-ml-instance"
-  platform_id = "standard-v3" # Intel Ice Lake
-  zone        = var.zone
+resource "yandex_resourcemanager_folder_iam_member" "clusters_editor" {
+  folder_id = var.folder_id
+  role      = "editor"
+  member    = "serviceAccount:${yandex_iam_service_account.k8s_cluster_sa.id}"
+}
 
-  scheduling_policy {
-    preemptible = true
-  }
+resource "yandex_iam_service_account" "k8s_node_sa" {
+  name        = "k8s-node-sa"
+  description = "Service account for Kubernetes nodes"
+}
 
-  resources {
-    cores         = 8
-    memory        = 32
-    core_fraction = 100
-  }
+resource "yandex_resourcemanager_folder_iam_member" "nodes_puller" {
+  folder_id = var.folder_id
+  role      = "container-registry.images.puller"
+  member    = "serviceAccount:${yandex_iam_service_account.k8s_node_sa.id}"
+}
 
-  boot_disk {
-    initialize_params {
-      image_id = data.yandex_compute_image.debian.id
-      size     = 93
-      type     = "network-ssd-nonreplicated"
+# 3. Kubernetes Cluster
+resource "yandex_kubernetes_cluster" "mks_cluster" {
+  name        = "mlops-mks-cluster"
+  network_id  = yandex_vpc_network.k8s_network.id
+  
+  master {
+    version   = "1.33" # Replace with needed or leave default
+    public_ip = true   # Public IP for the master
+
+    zonal {
+      zone      = yandex_vpc_subnet.k8s_subnet.zone
+      subnet_id = yandex_vpc_subnet.k8s_subnet.id
     }
   }
 
-  network_interface {
-    subnet_id = yandex_vpc_subnet.vm_subnet.id
-    nat       = true # White IP
-  }
+  service_account_id      = yandex_iam_service_account.k8s_cluster_sa.id
+  node_service_account_id = yandex_iam_service_account.k8s_node_sa.id
 
-  metadata = {
-    user-data = <<EOF
-#cloud-config
-users:
-  - name: zodiac
-    groups: sudo
-    shell: /bin/bash
-    sudo: ['ALL=(ALL) NOPASSWD:ALL']
-    ssh-authorized-keys:
-      - ${var.public_key}
-EOF
-  }
-
-  allow_stopping_for_update = true
+  depends_on = [
+    yandex_resourcemanager_folder_iam_member.clusters_editor,
+    yandex_resourcemanager_folder_iam_member.nodes_puller
+  ]
 }
 
-output "vm_public_ip" {
-  value = yandex_compute_instance.ml_vm.network_interface[0].nat_ip_address
-}
+# 4. Kubernetes Node Group (16 vCPU, 64 GB RAM)
+resource "yandex_kubernetes_node_group" "mks_node_group" {
+  cluster_id  = yandex_kubernetes_cluster.mks_cluster.id
+  name        = "mlops-node-group"
+  version     = "1.33"
 
-resource "local_file" "ansible_inventory" {
-  content = templatefile("${path.module}/inventory.tftpl", {
-    ip_address = yandex_compute_instance.ml_vm.network_interface[0].nat_ip_address
-  })
-  filename = "${path.module}/../../infra/ansible/inventory.yml"
-}
+  instance_template {
+    platform_id = "standard-v3" # Intel Ice Lake (good for ML)
 
-resource "null_resource" "run_ansible" {
-  depends_on = [yandex_compute_instance.ml_vm, local_file.ansible_inventory]
+    network_interface {
+      nat        = true
+      subnet_ids = [yandex_vpc_subnet.k8s_subnet.id]
+    }
 
-  provisioner "local-exec" {
-    command = "sleep 60 && ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i ${path.module}/../../infra/ansible/inventory.yml ${path.module}/../../infra/ansible/playbook.yml"
+    resources {
+      memory        = 64
+      cores         = 16
+      core_fraction = 100
+    }
+
+    boot_disk {
+      type = "network-ssd"
+      size = 93
+    }
+
+    scheduling_policy {
+      preemptible = false
+    }
+
+    metadata = {
+      ssh-keys = "ubuntu:${var.public_key}"
+    }
   }
+
+  scale_policy {
+    fixed_scale {
+      size = 1
+    }
+  }
+  
+  allocation_policy {
+    location {
+      zone = var.zone
+    }
+  }
+
+  maintenance_policy {
+    auto_upgrade = true
+    auto_repair  = true
+  }
+}
+
+output "k8s_cluster_ip" {
+  value = yandex_kubernetes_cluster.mks_cluster.master[0].external_v4_endpoint
 }
 

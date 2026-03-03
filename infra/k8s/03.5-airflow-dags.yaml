@@ -1,0 +1,79 @@
+apiVersion: v1
+data:
+  train_dag.py: "from airflow import DAG\nfrom airflow.operators.bash import BashOperator\n\
+    from datetime import datetime, timedelta\nimport os\n\ndefault_args = {\n    'owner':\
+    \ 'airflow',\n    'depends_on_past': False,\n    'start_date': datetime(2024,\
+    \ 1, 1),\n    'email_on_failure': False,\n    'email_on_retry': False,\n    'retries':\
+    \ 0,\n}\n\nif os.path.exists(\"/opt/airflow/ml_code/train_script.py\"):\n    #\
+    \ Dev mode: use mounted code\n    REPO_DIR = \"/opt/airflow/ml_code\"\n    print(f\"\
+    Using local development code mounted at {REPO_DIR}\")\nelse:\n    # Prod mode:\
+    \ clone from git\n    REPO_DIR = \"/opt/airflow/repo/ml\"\n    \nML_HOME = \"\
+    /opt/airflow/ml\" # Artifacts output\n\nMODEL_ID = \"Qwen/Qwen2.5-3B-Instruct\"\
+    \n\nwith DAG(\n    'train_reminder_bot_cpu',\n    default_args=default_args,\n\
+    \    description='End-to-end Pipeline: Train -> Test -> Export GGUF',\n    schedule_interval=None,\n\
+    \    catchup=False,\n    tags=['llm', 'training', 'cpu', 'gguf'],\n) as dag:\n\
+    \n    # 1. Clone/Pull Code (Conditioned)\n    t1_setup_code = BashOperator(\n\
+    \        task_id='setup_codebase',\n        bash_command=f\"\"\"\n        # If\
+    \ we are in dev mode (REPO_DIR mounted), skip git clone entirely\n        if [[\
+    \ \"{REPO_DIR}\" == \"/opt/airflow/ml_code\" ]]; then\n            echo \"Dev\
+    \ Mode: Using local code at {REPO_DIR}. Skipping git clone.\"\n            exit\
+    \ 0\n        fi\n\n        echo \"Setting up repository at {REPO_DIR}...\"\n \
+    \       # \u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u043C \u043F\u0435\
+    \u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0435 \u043E\u043A\u0440\u0443\u0436\
+    \u0435\u043D\u0438\u044F, \u043F\u0435\u0440\u0435\u0434\u0430\u043D\u043D\u044B\
+    \u0435 \u0432 Airflow\n        # \u0415\u0441\u043B\u0438 \u043F\u0435\u0440\u0435\
+    \u043C\u0435\u043D\u043D\u0430\u044F \u043D\u0435 \u0437\u0430\u0434\u0430\u043D\
+    \u0430, \u0443\u043F\u0430\u0434\u0435\u043C \u0441 \u043E\u0448\u0438\u0431\u043A\
+    \u043E\u0439, \u0447\u0442\u043E\u0431\u044B \u043D\u0435 \u043A\u043B\u043E\u043D\
+    \u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0434\u0435\u0444\u043E\u043B\u0442\
+    \u043D\u044B\u0439 \u0440\u0435\u043F\u043E\n        GIT_URL=$GIT_REPO_URL\n \
+    \       BRANCH=$GIT_BRANCH\n        \n        if [ -z \"$GIT_URL\" ]; then\n \
+    \           echo \"ERROR: GIT_REPO_URL environment variable is not set\"\n   \
+    \         exit 1\n        fi\n\n        if [ -z \"$BRANCH\" ]; then\n        \
+    \    echo \"WARNING: GIT_BRANCH is not set, defaulting to 'main'\"\n         \
+    \   BRANCH=\"main\"\n        fi\n        \n        if [ ! -d \"{REPO_DIR}/.git\"\
+    \ ]; then\n            echo \"Cloning $GIT_URL (branch: $BRANCH)...\"\n      \
+    \      git clone -b $BRANCH $GIT_URL {REPO_DIR}\n        else\n            echo\
+    \ \"Updating repository...\"\n            cd {REPO_DIR}\n            git fetch\
+    \ origin\n            git reset --hard origin/$BRANCH\n            git checkout\
+    \ $BRANCH\n            git pull origin $BRANCH\n        fi\n        \"\"\"\n \
+    \   )\n    \n    # Create environment with AWS credentials\n    env_vars = os.environ.copy()\n\
+    \    env_vars['PYTHONUNBUFFERED'] = '1'\n    \n    # 2. Train (CPU Compatible)\n\
+    \    t2_train = BashOperator(\n        task_id='train_model',\n        bash_command=f\"\
+    \"\"\n        # If running from local mount (REPO_DIR == /opt/airflow/ml_code),\
+    \ prevent git commands from failing\n        if [[ \"{REPO_DIR}\" == \"/opt/airflow/ml_code\"\
+    \ ]]; then\n            echo \"Skipping git operations for local dev mount...\"\
+    \n            cd {REPO_DIR}\n        else\n            echo \"Using cloned repository\
+    \ at {REPO_DIR}...\"\n            cd {REPO_DIR}\n        fi\n\n        python3\
+    \ train_script.py \\\\\n          --data_path {REPO_DIR}/labeled_dataset.json\
+    \ \\\\\n          --output_dir {ML_HOME}/results \\\\\n          --epochs 1 \\\
+    \\\n          --model_id \"{MODEL_ID}\" \\\\\n          --run_id_file {ML_HOME}/last_run_id.txt\n\
+    \        \"\"\",\n        env=env_vars,\n        execution_timeout=timedelta(hours=12)\
+    \ # CPU training is slow\n    )\n\n    # 3. Test\n    t3_test = BashOperator(\n\
+    \        task_id='test_model',\n        bash_command=f\"\"\"\n        # Handle\
+    \ path differences between dev mount and prod repo structure\n        if [[ \"\
+    {REPO_DIR}\" == \"/opt/airflow/ml_code\" ]]; then\n            cd {REPO_DIR}\n\
+    \        else\n            cd {REPO_DIR}/ml\n        fi\n        \n        python3\
+    \ test_script.py \\\\\n          --model_id \"{MODEL_ID}\" \\\\\n          --adapter_path\
+    \ {ML_HOME}/results/final_adapter \\\\\n          --test_data labeled_dataset.json\
+    \ \\\\\n          --run_id_file {ML_HOME}/last_run_id.txt\n        \"\"\",\n \
+    \       env=env_vars\n    )\n\n    # 4. Export to GGUF\n    t4_export = BashOperator(\n\
+    \        task_id='export_gguf',\n        bash_command=f\"\"\"\n        # Handle\
+    \ path differences between dev mount and prod repo structure\n        if [[ \"\
+    {REPO_DIR}\" == \"/opt/airflow/ml_code\" ]]; then\n            cd {REPO_DIR}\n\
+    \        else\n            cd {REPO_DIR}/ml\n        fi\n\n        python3 export_gguf.py\
+    \ \\\\\n          --model_id \"{MODEL_ID}\" \\\\\n          --adapter_path {ML_HOME}/results/final_adapter\
+    \ \\\\\n          --output_dir {ML_HOME}/results \\\\\n          --run_id_file\
+    \ {ML_HOME}/last_run_id.txt\n        \"\"\",\n        env=env_vars,\n        execution_timeout=timedelta(hours=2)\n\
+    \    )\n\n    # 5. Compare & Register Model\n    t5_compare = BashOperator(\n\
+    \        task_id='compare_and_register',\n        bash_command=f\"\"\"\n     \
+    \   # Handle path differences between dev mount and prod repo structure\n    \
+    \    if [[ \"{REPO_DIR}\" == \"/opt/airflow/ml_code\" ]]; then\n            cd\
+    \ {REPO_DIR}\n        else\n            cd {REPO_DIR}/ml\n        fi\n\n     \
+    \   python3 compare_script.py \\\\\n          --run_id_file {ML_HOME}/last_run_id.txt\n\
+    \        \"\"\",\n        env=env_vars\n    )\n\n    t1_setup_code >> t2_train\
+    \ >> t3_test >> t4_export >> t5_compare\n"
+kind: ConfigMap
+metadata:
+  name: airflow-dags-cm
+  namespace: mlops

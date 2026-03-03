@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: mlops
+spec:
+  ports:
+  - port: 5000
+  selector:
+    app: mlflow
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: mlops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+      - args:
+        - mlflow server --backend-store-uri postgresql://airflow:airflow@postgres:5432/mlflow_db
+          --default-artifact-root s3://$(MLFLOW_S3_BUCKET)/ml-artifacts --host 0.0.0.0
+          --port 5000 --workers 4 --serve-artifacts --allowed-hosts '*'
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: GUNICORN_CMD_ARGS
+          value: --bind=0.0.0.0:5000 --forwarded-allow-ips='*'
+        envFrom:
+        - configMapRef:
+            name: infra-env
+        - secretRef:
+            name: infra-secrets
+        image: alexzodiac/mlops-airflow:latest
+        name: mlflow
+        ports:
+        - containerPort: 5000

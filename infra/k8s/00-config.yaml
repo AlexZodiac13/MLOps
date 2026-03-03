@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mlops
+---
+apiVersion: v1
+data:
+  AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/1
+  AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
+  AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+  AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+  AIRFLOW__CORE__FERNET_KEY: 46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+  AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+  AIRFLOW__WEBSERVER__BASE_URL: http://owgrant.home/airflow
+  AIRFLOW__WEBSERVER__SECRET_KEY: secret_key_secret_key_secret_key_secret_key_secret_key_secret_key
+  MLFLOW_TRACKING_URI: http://mlflow:5000
+kind: ConfigMap
+metadata:
+  name: infra-env
+  namespace: mlops
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: infra-secrets
+  namespace: mlops
+stringData:
+  AWS_ACCESS_KEY_ID: YOUR_AWS_KEY
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_SECRET_ACCESS_KEY: YOUR_AWS_SECRET
+  GIT_BRANCH: main
+  GIT_REPO_URL: YOUR_GIT_REPO
+  HF_TOKEN: YOUR_HF_TOKEN
+  MLFLOW_S3_BUCKET: YOUR_BUCKET
+  MLFLOW_S3_ENDPOINT_URL: https://storage.yandexcloud.net
+  POSTGRES_DB: airflow
+  POSTGRES_PASSWORD: airflow
+  POSTGRES_USER: airflow
+type: Opaque
