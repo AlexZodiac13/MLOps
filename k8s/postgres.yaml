@@ -33,6 +33,7 @@ spec:
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data
+          subPath: postgres-data
         livenessProbe:
           exec:
             command: ["pg_isready", "-U", "reminder", "-d", "reminderdb"]
