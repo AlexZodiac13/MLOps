@@ -96,6 +96,11 @@ jobs:
           yc config set folder-id ${{ secrets.FOLDER_ID }}
           yc config set cloud-id ${{ secrets.CLOUD_ID }}
 
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
       - name: Get K8s Credentials
         run: |
           # Получаем ID кластера если не задан явно, можно взять первый из списка или по имени
