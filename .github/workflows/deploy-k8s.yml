@@ -136,3 +136,13 @@ jobs:
           # Force restart deployments to pick up new images if using 'latest' tag
           kubectl rollout restart deployment/model
           kubectl rollout restart deployment/bot
+
+          # Wait for deployments to be ready
+          echo "Waiting for Postgres..."
+          kubectl rollout status deployment/postgres --timeout=300s
+          
+          echo "Waiting for Model..."
+          kubectl rollout status deployment/model --timeout=300s
+          
+          echo "Waiting for Bot..."
+          kubectl rollout status deployment/bot --timeout=300s

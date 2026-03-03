@@ -46,7 +46,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: postgres
+  name: reminder-postgres-db
 spec:
   selector:
     app: postgres
