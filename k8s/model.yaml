@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: model
+  template:
+    metadata:
+      labels:
+        app: model
+    spec:
+      containers:
+      - name: model
+        image: <DOCKER_USERNAME>/reminder-model:latest
+        imagePullPolicy: Always
+        envFrom:
+        - secretRef:
+            name: reminder-secrets
+        resources:
+          limits:
+            memory: "8Gi"
+            cpu: "6"
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+        ports:
+        - containerPort: 8001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: model
+spec:
+  selector:
+    app: model
+  ports:
+  - port: 8001
+    targetPort: 8001

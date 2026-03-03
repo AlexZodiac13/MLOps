@@ -1,13 +1,6 @@
 name: Build and Deploy Bot
 
 on:
-  push:
-    branches:
-      - main
-      - project-work
-    paths:
-      - 'deploy/**'
-      - '.github/workflows/deploy-bot.yml'
   workflow_dispatch:
 
 env:

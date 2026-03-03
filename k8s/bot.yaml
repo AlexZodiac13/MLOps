@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bot
+  template:
+    metadata:
+      labels:
+        app: bot
+    spec:
+      containers:
+      - name: bot
+        image: <DOCKER_USERNAME>/reminder-bot:latest
+        imagePullPolicy: Always
+        envFrom:
+        - secretRef:
+            name: reminder-secrets
+        env:
+        - name: ML_API_URL
+          value: "http://model:8001/extract_reminder"
+        # Ensure connection to postgres and model checks via initContainer if critical, or let it retry

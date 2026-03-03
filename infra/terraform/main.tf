@@ -115,3 +115,98 @@ resource "null_resource" "run_ansible" {
   }
 }
 
+# --- Kubernetes Cluster Configuration ---
+
+# Service Account for K8s
+resource "yandex_iam_service_account" "k8s_sa" {
+  name        = "k8s-service-account"
+  description = "Service account for Kubernetes cluster"
+}
+
+# Roles for Service Account
+resource "yandex_resourcemanager_folder_iam_member" "k8s_editor" {
+  folder_id = var.folder_id
+  role      = "editor"
+  member    = "serviceAccount:${yandex_iam_service_account.k8s_sa.id}"
+}
+
+resource "yandex_resourcemanager_folder_iam_member" "k8s_images_puller" {
+  folder_id = var.folder_id
+  role      = "container-registry.images.puller"
+  member    = "serviceAccount:${yandex_iam_service_account.k8s_sa.id}"
+}
+
+# K8s Cluster (Zonal)
+resource "yandex_kubernetes_cluster" "k8s_cluster" {
+  name        = "k8s-cluster"
+  network_id  = yandex_vpc_network.vm_network.id
+
+  master {
+    version   = "1.33"
+    public_ip = true
+
+    zonal {
+      zone      = yandex_vpc_subnet.vm_subnet.zone
+      subnet_id = yandex_vpc_subnet.vm_subnet.id
+    }
+  }
+
+  service_account_id      = yandex_iam_service_account.k8s_sa.id
+  node_service_account_id = yandex_iam_service_account.k8s_sa.id
+
+  depends_on = [
+    yandex_resourcemanager_folder_iam_member.k8s_editor,
+    yandex_resourcemanager_folder_iam_member.k8s_images_puller
+  ]
+}
+
+# Single Node Group
+resource "yandex_kubernetes_node_group" "k8s_node_group" {
+  cluster_id  = yandex_kubernetes_cluster.k8s_cluster.id
+  name        = "k8s-node-group"
+  version     = "1.33"
+
+  instance_template {
+    platform_id = "standard-v3"
+
+    network_interface {
+      nat        = true
+      subnet_ids = [yandex_vpc_subnet.vm_subnet.id]
+    }
+
+    resources {
+      memory = 16
+      cores  = 8
+    }
+
+    boot_disk {
+      type = "network-ssd"
+      size = 64
+    }
+
+    metadata = {
+      ssh-keys = "zodiac:${var.public_key}"
+    }
+  }
+
+  scale_policy {
+    fixed_scale {
+      size = 1
+    }
+  }
+
+  allocation_policy {
+    location {
+      zone = var.zone
+    }
+  }
+}
+
+output "k8s_cluster_id" {
+  value = yandex_kubernetes_cluster.k8s_cluster.id
+}
+
+output "k8s_external_v4_endpoint" {
+  value = yandex_kubernetes_cluster.k8s_cluster.master[0].external_v4_endpoint
+}
+

@@ -1,0 +1,66 @@
+name: Deploy to K8s (No Build)
+
+on:
+  workflow_dispatch:
+
+env:
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  # Image names
+  IMAGE_BOT_NAME: ${{ secrets.DOCKER_USERNAME }}/reminder-bot
+  IMAGE_MODEL_NAME: ${{ secrets.DOCKER_USERNAME }}/reminder-model
+  CLUSTER_ID: ${{ secrets.K8S_CLUSTER_ID }} 
+  
+jobs:
+  deploy-k8s:
+    name: Deploy to Kubernetes
+    runs-on: [self-hosted, MLOps-runner]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install YC CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
+
+      - name: Configure YC CLI
+        run: |
+          yc config set token ${{ secrets.YC_TOKEN }}
+          yc config set folder-id ${{ secrets.FOLDER_ID }}
+          yc config set cloud-id ${{ secrets.CLOUD_ID }}
+
+      - name: Get K8s Credentials
+        run: |
+          # Получаем ID кластера
+          CLUSTER_ID=$(yc managed-kubernetes cluster list --format json | jq -r '.[0].id')
+          if [ -z "$CLUSTER_ID" ]; then
+             echo "Cluster not found"
+             exit 1
+          fi
+          yc managed-kubernetes cluster get-credentials --id $CLUSTER_ID --external --force
+
+      - name: Prepare Secrets
+        run: |
+          # Создаем файл .env из секрета
+          echo "${{ secrets.BOTENV_B64 }}" | base64 --decode > .env
+          
+          # Удаляем старый секрет и создаем новый
+          kubectl delete secret reminder-secrets --ignore-not-found
+          kubectl create secret generic reminder-secrets --from-env-file=.env
+
+      - name: Update Image Names in Manifests
+        run: |
+          # Заменяем плейсхолдер <DOCKER_USERNAME> на реальное значение 
+          sed -i "s|<DOCKER_USERNAME>|${{ env.DOCKER_USERNAME }}|g" k8s/bot.yaml
+          sed -i "s|<DOCKER_USERNAME>|${{ env.DOCKER_USERNAME }}|g" k8s/model.yaml
+
+      - name: Apply Manifests
+        run: |
+          kubectl apply -f k8s/postgres.yaml
+          kubectl apply -f k8s/model.yaml
+          kubectl apply -f k8s/bot.yaml
+          
+          # Force restart deployments to pick up new images if using 'latest' tag
+          kubectl rollout restart deployment/model
+          kubectl rollout restart deployment/bot
