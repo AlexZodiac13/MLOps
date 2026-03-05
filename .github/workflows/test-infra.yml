@@ -6,12 +6,37 @@ on:
     paths:
       - 'infra/terraform/**'
       - 'infra/ansible/**'
+      - 'deploy/docker-compose.yaml'
+      - 'infra/docker-compose.yml'
   pull_request:
     paths:
       - 'infra/terraform/**'
       - 'infra/ansible/**'
+      - 'deploy/docker-compose.yaml'
+      - 'infra/docker-compose.yml'
 
 jobs:
+  docker-compose-lint:
+    name: Docker Compose Syntax Check
+    runs-on: [self-hosted, MLOps-runner]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Create Mock .env files
+        run: |
+          # Создаем болванки файлов .env, чтобы docker-compose config не падал из-за отсутствующих переменных
+          cp deploy/.env.example deploy/.env || touch deploy/.env
+          cp infra/.env.example infra/.env || touch infra/.env
+
+      - name: Validate Deploy Docker Compose
+        working-directory: deploy
+        run: docker compose -f docker-compose.yaml config -q
+
+      - name: Validate Infra Docker Compose
+        working-directory: infra
+        run: docker compose -f docker-compose.yml config -q
+
   terratest:
     name: Terraform Tests (Terratest)
     runs-on: [self-hosted, MLOps-runner]
