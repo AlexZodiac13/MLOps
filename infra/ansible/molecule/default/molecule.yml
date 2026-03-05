@@ -5,8 +5,9 @@ driver:
   name: docker
 platforms:
   - name: instance
-    image: debian:12
-    command: /sbin/init
+    image: geerlingguy/docker-debian12-ansible:latest
+    override_command: false
+    command: ""
     privileged: true
     pre_build_image: true
     volumes:
