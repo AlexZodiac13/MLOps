@@ -1,0 +1,7 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  tasks:
+    - name: "Include playbook.yml"
+      include_tasks: "../../playbook.yml"
