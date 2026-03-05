@@ -1,6 +1,7 @@
 name: Infrastructure Tests
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'infra/terraform/**'
