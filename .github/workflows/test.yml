@@ -1,4 +1,4 @@
-name: Infrastructure Tests
+name: Tests
 
 on:
   workflow_dispatch:
@@ -8,14 +8,40 @@ on:
       - 'infra/ansible/**'
       - 'deploy/docker-compose.yaml'
       - 'infra/docker-compose.yml'
+      - 'deploy/bot/src/**'
+      - 'deploy/ml-model/src/**'
+      - 'ml/**'
   pull_request:
     paths:
       - 'infra/terraform/**'
       - 'infra/ansible/**'
       - 'deploy/docker-compose.yaml'
       - 'infra/docker-compose.yml'
+      - 'deploy/bot/src/**'
+      - 'deploy/ml-model/src/**'
+      - 'ml/**'
 
 jobs:
+  python-lint:
+    name: Python Lint (flake8)
+    runs-on: [self-hosted, MLOps-runner]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Install flake8
+        run: pip install flake8
+        
+      - name: Run flake8
+        run: |
+          flake8 deploy/bot/src deploy/ml-model/src ml/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 deploy/bot/src deploy/ml-model/src ml/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
   docker-compose-lint:
     name: Docker Compose Syntax Check
     runs-on: [self-hosted, MLOps-runner]
