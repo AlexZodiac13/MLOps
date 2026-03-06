@@ -61,13 +61,13 @@ jobs:
           EOF
           terraform init -backend-config=backend.conf
 
-      # - name: Terraform Validate
-      #   working-directory: ${{ env.TF_ROOT }}
-      #   run: terraform validate
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform validate
 
-      # - name: Terraform Plan
-      #   working-directory: ${{ env.TF_ROOT }}
-      #   run: terraform plan -out=tfplan
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform plan -out=tfplan
 
       - name: Install Ansible and SSH client
         run: |
