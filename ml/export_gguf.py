@@ -144,7 +144,7 @@ def merge_and_export(model_id, adapter_path, output_dir, quantize_type="q4_k_m",
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-3B-Instruct")
+    parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-0.5B-Instruct")
     # Adapter path is passed from the previous step output
     parser.add_argument("--adapter_path", type=str, required=True)
     parser.add_argument("--output_dir", type=str, default="./results")

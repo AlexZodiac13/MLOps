@@ -219,13 +219,13 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
 
         # 5. Training Args
         use_fp16 = False # torch.cuda.is_available() # DISABLE FP16 TO DEBUG
-        use_bf16 = False 
-        
+        use_bf16 = False
+
         training_args = SFTConfig(
             output_dir=output_dir,
             num_train_epochs=epochs,
-            per_device_train_batch_size=1 if not torch.cuda.is_available() else 4, # Smaller batch on CPU
-            gradient_accumulation_steps=8 if not torch.cuda.is_available() else 4,
+            per_device_train_batch_size=1 if not torch.cuda.is_available() else 16, # 0.5B model fits easily in GPU memory
+            gradient_accumulation_steps=8 if not torch.cuda.is_available() else 2,
             learning_rate=2e-4,
             fp16=use_fp16, # False
             bf16=False, # Safe default for CPU and avoiding errors on some GPUs
@@ -303,7 +303,7 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_path", type=str, required=True)
-    parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-3B-Instruct")
+    parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-0.5B-Instruct")
     parser.add_argument("--output_dir", type=str, default="./results")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--run_id_file", type=str, default="last_run_id.txt")

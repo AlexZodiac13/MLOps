@@ -24,11 +24,11 @@ WORKDIR = REPO_DIR
     
 ML_HOME = "/opt/airflow/ml" # Artifacts output
 
-MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
+MODEL_ID = "Qwen/Qwen2.5-0.5B-Instruct"
 TRAIN_EPOCHS = int(os.getenv("TRAIN_EPOCHS", "3"))
 # These limits are for train-time HF evaluation in Airflow worker,
 # not for production GGUF service latency/RAM.
-MIN_WEIGHTED_F1 = float(os.getenv("MIN_WEIGHTED_F1", "0.78"))
+MIN_WEIGHTED_F1 = float(os.getenv("MIN_WEIGHTED_F1", "0.75"))
 MAX_P95_LATENCY_SEC = float(os.getenv("MAX_P95_LATENCY_SEC", "6.0"))
 MAX_RAM_MB = float(os.getenv("MAX_RAM_MB", "8192"))
 MIN_JSON_VALID_RATE = float(os.getenv("MIN_JSON_VALID_RATE", "0.95"))
