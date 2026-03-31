@@ -48,6 +48,35 @@ with DAG(
     tags=['llm', 'training', 'cpu', 'gguf'],
 ) as dag:
 
+    # 0. Скачать labeled_dataset_latest.json из S3
+    t0_download_data = BashOperator(
+        task_id='download_training_data',
+        bash_command=f"""
+        echo "Downloading labeled dataset from S3..."
+        python3 -c "
+import boto3
+import os
+
+s3_client = boto3.client(
+    's3',
+    endpoint_url=os.environ.get('MLFLOW_S3_ENDPOINT_URL'),
+    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+    region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+)
+
+bucket = os.environ.get('MLFLOW_S3_BUCKET')
+s3_key = 'labeled_data/labeled_dataset_latest.json'
+local_file = '{ML_HOME}/labeled_dataset.json'
+
+os.makedirs(os.path.dirname(local_file), exist_ok=True)
+print(f'Downloading s3://{{bucket}}/{{s3_key}} to {{local_file}}')
+s3_client.download_file(bucket, s3_key, local_file)
+print('Download complete!')
+"
+        """,
+    )
+
     # 1. Clone/Pull Code (Conditioned)
     t1_setup_code = BashOperator(
         task_id='setup_codebase',
@@ -106,9 +135,9 @@ with DAG(
         fi
 
         python3 train_script.py \\
-          --data_path {REPO_DIR}/labeled_dataset.json \\
+          --data_path {ML_HOME}/labeled_dataset.json \\
           --output_dir {ML_HOME}/results \\
-                    --epochs {TRAIN_EPOCHS} \\
+          --epochs {TRAIN_EPOCHS} \\
           --model_id "{MODEL_ID}" \\
           --run_id_file {ML_HOME}/last_run_id.txt
         """,
@@ -190,4 +219,4 @@ with DAG(
         env=env_vars
     )
 
-    t1_setup_code >> t2_train >> t3_test >> t3_quality_gate >> t4_export >> t5_compare
+    t0_download_data >> t1_setup_code >> t2_train >> t3_test >> t3_quality_gate >> t4_export >> t5_compare
