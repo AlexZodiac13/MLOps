@@ -4,9 +4,11 @@ import json
 import time
 import traceback
 import logging
+import hashlib
+import random
 import torch
 import mlflow
-from datasets import load_dataset
+from datasets import Dataset
 from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from transformers import (
     AutoModelForCausalLM,
@@ -30,7 +32,45 @@ def format_instruction(sample):
     ]
     return {"messages": messages}
 
-def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.txt"):
+def stable_hash(records):
+    normalized = json.dumps(records, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def split_records(records, seed=42, train_ratio=0.8, val_ratio=0.1):
+    if not records:
+        return [], [], []
+
+    shuffled = list(records)
+    random.Random(seed).shuffle(shuffled)
+
+    total = len(shuffled)
+    train_size = max(1, int(total * train_ratio))
+    val_size = int(total * val_ratio)
+
+    if train_size >= total:
+        train_size = total - 1
+    if train_size < 1:
+        train_size = 1
+
+    remaining = total - train_size
+    if remaining > 1:
+        val_size = max(1, min(val_size, remaining - 1))
+    else:
+        val_size = 0
+
+    val_end = train_size + val_size
+    train_records = shuffled[:train_size]
+    val_records = shuffled[train_size:val_end]
+    holdout_records = shuffled[val_end:]
+
+    if not holdout_records and val_records:
+        holdout_records = [val_records.pop()]
+
+    return train_records, val_records, holdout_records
+
+
+def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.txt", split_seed=42):
     # Setup logging for better diagnostics
     logger = logging.getLogger("train_script")
     if not logger.handlers:
@@ -59,12 +99,40 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
             
         mlflow.log_param("model_id", model_id)
         mlflow.log_param("epochs", epochs)
+        mlflow.log_param("split_seed", split_seed)
+        mlflow.set_tag("model_variant", "finetuned")
+        mlflow.set_tag("pipeline_stage", "train")
 
         # 1. Load Dataset
         logger.debug("Loading dataset from %s", data_path)
-        dataset = load_dataset("json", data_files=data_path, split="train")
-        dataset = dataset.map(format_instruction)
-        logger.info("Dataset loaded: %d samples", len(dataset))
+        with open(data_path, "r", encoding="utf-8") as file_obj:
+            records = json.load(file_obj)
+
+        train_records, val_records, holdout_records = split_records(records, seed=split_seed)
+        if not train_records:
+            raise ValueError("Training split is empty. Need at least one training sample.")
+
+        os.makedirs(output_dir, exist_ok=True)
+        holdout_path = os.path.join(output_dir, "holdout_dataset.json")
+        with open(holdout_path, "w", encoding="utf-8") as holdout_file:
+            json.dump(holdout_records, holdout_file, ensure_ascii=False, indent=2)
+
+        train_dataset = Dataset.from_list(train_records).map(format_instruction)
+        eval_dataset = Dataset.from_list(val_records).map(format_instruction) if val_records else None
+
+        mlflow.log_param("num_samples_total", len(records))
+        mlflow.log_param("num_samples_train", len(train_records))
+        mlflow.log_param("num_samples_val", len(val_records))
+        mlflow.log_param("num_samples_holdout", len(holdout_records))
+        mlflow.log_param("data_version", stable_hash(records))
+        mlflow.log_artifact(holdout_path, artifact_path="data")
+        logger.info(
+            "Dataset loaded: total=%d, train=%d, val=%d, holdout=%d",
+            len(records),
+            len(train_records),
+            len(val_records),
+            len(holdout_records),
+        )
 
         # 2. Config & Tokenizer
         device_map = "auto"
@@ -88,6 +156,8 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
             # We must use float32 for stable training on CPU (Linear layers crash with Half/Float mismatch)
             model_kwargs["device_map"] = device_map
             model_kwargs["torch_dtype"] = torch.float32
+
+        mlflow.log_param("train_env", "gpu" if torch.cuda.is_available() else "cpu")
 
         logger.debug("Loading tokenizer for %s", model_id)
         tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
@@ -162,6 +232,7 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
             use_cpu=not torch.cuda.is_available(),
             logging_steps=10,
             save_strategy="epoch",
+            eval_strategy="epoch" if eval_dataset is not None else "no",
             optim="adamw_torch", # standard adamw works everywhere
             report_to="mlflow",  # Changed from "none" to "mlflow" to enable logging
             max_length=512,
@@ -182,11 +253,12 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
         logger.info("Preparing trainer and PEFT configuration")
         trainer = SFTTrainer(
             model=model,
-            train_dataset=dataset,
+            train_dataset=train_dataset,
             args=training_args,
             peft_config=peft_config,
             processing_class=tokenizer,
-            formatting_func=safe_formatting_func
+            formatting_func=safe_formatting_func,
+            eval_dataset=eval_dataset,
         )
 
         # Run training with robust error handling and diagnostic dumps on failure
@@ -196,6 +268,7 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
             trainer.train()
             train_dur = time.time() - train_start
             logger.info("trainer.train() completed in %.2f sec", train_dur)
+            mlflow.log_metric("training_duration_sec", train_dur)
         except Exception as e:
             logger.exception("trainer.train() failed: %s", e)
             # Write traceback to output_dir for offline inspection
@@ -224,6 +297,7 @@ def train(data_path, model_id, output_dir, epochs=1, run_id_file="last_run_id.tx
         
         # Log artifacts (adapters) to MLflow/S3
         mlflow.log_artifacts(adapter_path, artifact_path="adapter")
+        mlflow.log_metric("pipeline_elapsed_sec", time.time() - start_time)
         print("Training complete. Adapters saved and logged to MLflow.")
 
 if __name__ == "__main__":
@@ -233,6 +307,7 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, default="./results")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--run_id_file", type=str, default="last_run_id.txt")
+    parser.add_argument("--split_seed", type=int, default=42)
     args = parser.parse_args()
     
-    train(args.data_path, args.model_id, args.output_dir, args.epochs, args.run_id_file)
+    train(args.data_path, args.model_id, args.output_dir, args.epochs, args.run_id_file, args.split_seed)

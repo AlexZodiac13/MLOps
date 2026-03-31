@@ -24,6 +24,18 @@ x-airflow-common: &airflow-common
     # Git for cloning training code
     GIT_REPO_URL: ${GIT_REPO_URL}
     GIT_BRANCH: ${GIT_BRANCH}
+    # Train-time quality gate thresholds (used by Airflow DAG)
+    TRAIN_EPOCHS: ${TRAIN_EPOCHS:-3}
+    MIN_WEIGHTED_F1: ${MIN_WEIGHTED_F1:-0.78}
+    MAX_P95_LATENCY_SEC: ${MAX_P95_LATENCY_SEC:-6.0}
+    MAX_RAM_MB: ${MAX_RAM_MB:-8192}
+    MIN_JSON_VALID_RATE: ${MIN_JSON_VALID_RATE:-0.95}
+    MIN_EXACT_MATCH_RATE: ${MIN_EXACT_MATCH_RATE:-0.60}
+    QUALITY_GATE_STRICT: ${QUALITY_GATE_STRICT:-false}
+    EVAL_MAX_NEW_TOKENS: ${EVAL_MAX_NEW_TOKENS:-128}
+    MODEL_TARGET_STAGE: ${MODEL_TARGET_STAGE:-Production}
+    SELECT_BEST_AVAILABLE: ${SELECT_BEST_AVAILABLE:-true}
+    COMPARE_FAIL_IF_SKIPPED: ${COMPARE_FAIL_IF_SKIPPED:-false}
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
@@ -160,13 +172,13 @@ services:
     command: celery worker --celery-hostname=celery@%h
     hostname: airflow-worker
     # GPU Configuration (uncomment if needed and ensure proper NVIDIA Container Toolkit setup)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: always
     depends_on:
       airflow-base:

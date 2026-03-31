@@ -1,10 +1,33 @@
 import argparse
 import os
+import threading
+import time
 import torch
+import pandas as pd
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import subprocess
 import mlflow
+
+
+def _fmt_size(num_bytes):
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(num_bytes)
+    for unit in units:
+        if size < 1024.0 or unit == units[-1]:
+            return f"{size:.2f} {unit}"
+        size /= 1024.0
+
+
+class GGUFPointerModel(mlflow.pyfunc.PythonModel):
+    """Tiny pyfunc wrapper that exposes path to logged GGUF artifact."""
+
+    def load_context(self, context):
+        self.gguf_file = context.artifacts["gguf_file"]
+
+    def predict(self, context, model_input):
+        rows = len(model_input) if hasattr(model_input, "__len__") else 1
+        return pd.DataFrame({"gguf_file": [self.gguf_file] * rows})
 
 def merge_and_export(model_id, adapter_path, output_dir, quantize_type="q4_k_m", run_id_file="last_run_id.txt"):
     print(f"Loading base model: {model_id}")
@@ -85,7 +108,38 @@ def merge_and_export(model_id, adapter_path, output_dir, quantize_type="q4_k_m",
 
     # We can attach to the existing run if we pass run_id, or just log directly
     with mlflow.start_run(run_id=run_id):
-        mlflow.log_artifact(quantized_gguf_path, artifact_path="gguf")
+        artifact_size = os.path.getsize(quantized_gguf_path)
+        print(
+            f"Uploading GGUF artifact to MLflow: {quantized_gguf_path} ({_fmt_size(artifact_size)})",
+            flush=True,
+        )
+
+        upload_started = time.perf_counter()
+        stop_event = threading.Event()
+
+        def _upload_heartbeat():
+            while not stop_event.wait(30):
+                elapsed = time.perf_counter() - upload_started
+                print(f"Upload in progress... elapsed={elapsed:.1f}s", flush=True)
+
+        heartbeat = threading.Thread(target=_upload_heartbeat, daemon=True)
+        heartbeat.start()
+        try:
+            mlflow.log_artifact(quantized_gguf_path, artifact_path="gguf")
+            # Also log a lightweight MLflow model entity to populate Models column
+            # and support model registry flows that require logged_model artifacts.
+            model_info = mlflow.pyfunc.log_model(
+                artifact_path="gguf_model",
+                python_model=GGUFPointerModel(),
+                artifacts={"gguf_file": quantized_gguf_path},
+            )
+            print(f"Logged pyfunc model: {model_info.model_uri}", flush=True)
+        finally:
+            stop_event.set()
+            heartbeat.join(timeout=1)
+
+        elapsed_upload = time.perf_counter() - upload_started
+        print(f"Upload finished in {elapsed_upload:.1f}s", flush=True)
         print(f"Artifact logged: {quantized_gguf_path}")
 
 if __name__ == "__main__":
