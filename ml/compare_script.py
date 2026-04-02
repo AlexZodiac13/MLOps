@@ -15,6 +15,27 @@ def ranked_runs(client, experiment_id, filter_string, metric, latency_metric):
     )
 
 
+def clear_product_stage_from_other_runs(client, experiment_id, winner_run_id):
+    product_runs = client.search_runs(
+        experiment_ids=[experiment_id],
+        filter_string="tags.stage = 'Product'",
+    )
+
+    cleared = 0
+    for run in product_runs:
+        run_id = run.info.run_id
+        if run_id == winner_run_id:
+            continue
+        try:
+            client.delete_tag(run_id, "stage")
+            cleared += 1
+            print(f"Removed tag 'stage=Product' from run {run_id}")
+        except Exception as e:
+            print(f"Failed to remove tag 'stage=Product' from run {run_id}: {e}")
+
+    return cleared
+
+
 def has_gguf_artifact(client: MlflowClient, run_id: str) -> bool:
     try:
         artifacts = client.list_artifacts(run_id, path="gguf")
@@ -147,8 +168,16 @@ def compare_and_register(
         f"with {metric}: {metric_val}, {latency_metric}: {latency_val}"
     )
 
-    # Установить тег stage=Product для лучшего run
+    # Keep exactly one run with stage=Product in the experiment.
     try:
+        cleared_count = clear_product_stage_from_other_runs(
+            client,
+            experiment.experiment_id,
+            best_finetuned.info.run_id,
+        )
+        if cleared_count:
+            print(f"Cleared 'stage=Product' from {cleared_count} previous run(s)")
+
         client.set_tag(best_finetuned.info.run_id, "stage", "Product")
         print(f"Tag 'stage=Product' set for run {best_finetuned.info.run_id}")
     except Exception as e:

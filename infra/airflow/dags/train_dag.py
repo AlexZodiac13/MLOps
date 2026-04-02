@@ -142,7 +142,7 @@ print('Download complete!')
           --run_id_file {ML_HOME}/last_run_id.txt
         """,
         env=env_vars,
-        execution_timeout=timedelta(hours=12) # CPU training is slow
+        execution_timeout=timedelta(hours=24) # CPU training is slow
     )
 
     # 3. Test

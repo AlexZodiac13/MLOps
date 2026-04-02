@@ -20,16 +20,16 @@ WORKDIR = "/opt/airflow/ml_code"
 LABELING_MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
 
 # Множитель данных (аугментация)
-DATA_MULTIPLY = int(os.getenv("DATA_MULTIPLY", "30"))
-DATA_MULTIPLY_SEED = int(os.getenv("DATA_MULTIPLY_SEED", "42"))
+DATA_MULTIPLY = int(os.getenv("DATA_MULTIPLY", "15"))
+DATA_MULTIPLY_SEED = int(os.getenv("DATA_MULTIPLY_SEED", "21"))
 
 # Тестовый режим (ограничение количества данных для отладки)
-LABELING_LIMIT = int(os.getenv("LABELING_LIMIT", "100"))  # 0 = без лимита
+LABELING_LIMIT = int(os.getenv("LABELING_LIMIT", "0"))  # 0 = без лимита
 
 with DAG(
     'data_labeling_pipeline',
     default_args=default_args,
-    description='Data Augmentation + Labeling with Teacher Model',
+    description='Data Labeling with Teacher Model (with augmentation)',
     schedule_interval=None,
     catchup=False,
     tags=['llm', 'data', 'labeling', 'gpu'],
@@ -72,36 +72,56 @@ print('Download complete!')
         task_id='augment_data',
         bash_command=f"""
         cd {WORKDIR}
-        
-        echo "Augmenting data from user_messages.csv..."
+
+        echo "Generating augmented data with multiply={DATA_MULTIPLY}, seed={DATA_MULTIPLY_SEED}..."
+
+        if [ ! -f "{ML_HOME}/src_data/user_messages.csv" ]; then
+            echo "ERROR: Source file not found: {ML_HOME}/src_data/user_messages.csv"
+            ls -la {ML_HOME}/src_data/ 2>/dev/null || echo "Directory does not exist"
+            exit 1
+        fi
+
         python3 generet_data_set.py \\
           --input {ML_HOME}/src_data/user_messages.csv \\
           --output {ML_HOME}/src_data/user_messages_augmented.csv \\
           --multiply {DATA_MULTIPLY} \\
           --seed {DATA_MULTIPLY_SEED}
-        
-        echo "Augmentation complete. Rows:"
+
+        echo "Augmentation complete. Output file info:"
         wc -l {ML_HOME}/src_data/user_messages_augmented.csv
+        head -3 {ML_HOME}/src_data/user_messages_augmented.csv
         """,
     )
 
-    # 2. Лейблинг данных большой моделью
+    # 2. Лейблинг данных большой моделью — используем АУГМЕНТИРОВАННЫЕ данные
     t2_label = BashOperator(
         task_id='label_data',
         bash_command=f"""
         cd {WORKDIR}
+
+        echo "Labeling AUGMENTED data with {LABELING_MODEL_ID}..."
         
-        echo "Labeling augmented data with {LABELING_MODEL_ID}..."
+        # Проверка входного файла
+        if [ ! -f "{ML_HOME}/src_data/user_messages_augmented.csv" ]; then
+            echo "ERROR: Augmented file not found: {ML_HOME}/src_data/user_messages_augmented.csv"
+            ls -la {ML_HOME}/src_data/ 2>/dev/null || echo "Directory does not exist"
+            exit 1
+        fi
+        
+        echo "Input file info:"
+        wc -l {ML_HOME}/src_data/user_messages_augmented.csv
+        head -3 {ML_HOME}/src_data/user_messages_augmented.csv
+
         python3 label_data_script.py \\
           --input {ML_HOME}/src_data/user_messages_augmented.csv \\
           --output {ML_HOME}/labeled_dataset_{DATA_VERSION}.json \\
           --model_id "{LABELING_MODEL_ID}" \\
           {"--limit " + str(LABELING_LIMIT) if LABELING_LIMIT > 0 else ""}
-        
+
         echo "Labeling complete. Output size:"
         ls -lh {ML_HOME}/labeled_dataset_{DATA_VERSION}.json
         """,
-        execution_timeout=timedelta(hours=1) if LABELING_LIMIT > 0 else timedelta(hours=6)
+        execution_timeout=timedelta(hours=1) if LABELING_LIMIT > 0 else timedelta(hours=24)
     )
 
     # 3. Загрузка в S3
@@ -176,4 +196,5 @@ print('Latest pointer updated!')
         """,
     )
 
+    # Цепочка задач: с аугментацией
     t0_download >> t1_augment >> t2_label >> t3_upload >> t4_latest
